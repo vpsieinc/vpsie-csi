@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 
 	"code.k9.ms/vpsie-csi/util"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -31,8 +32,11 @@ type Config struct {
 }
 
 type Driver struct {
-	srv     *grpc.Server
+	srv    *grpc.Server
 	config Config
+
+	readyMu sync.Mutex // protects ready
+	ready   bool
 }
 
 func NewDriver(cfg *Config) (*Driver, error) {
@@ -56,7 +60,7 @@ func GetVersion() string {
 	return version
 }
 
-func (d *Driver)Run(ctx context.Context) error {
+func (d *Driver) Run(ctx context.Context) error {
 	scheme, addr, err := util.ParseEndpoint(d.config.EndPoint)
 	if err != nil {
 		return err
@@ -67,7 +71,7 @@ func (d *Driver)Run(ctx context.Context) error {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	logErr := func (ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) { 
+	logErr := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
 			klog.ErrorS(err, "Grpc error")
@@ -77,8 +81,8 @@ func (d *Driver)Run(ctx context.Context) error {
 
 	d.srv = grpc.NewServer(grpc.UnaryInterceptor(logErr))
 	csi.RegisterIdentityServer(d.srv, d)
-	csi.RegisterControllerServer(d.srv, d)
-	csi.RegisterNodeServer(d.srv, d)
+	// csi.RegisterControllerServer(d.srv, d)
+	// csi.RegisterNodeServer(d.srv, d)
 
 	klog.V(4).InfoS("Listening for connections", "address", grpListener.Addr())
 	return d.srv.Serve(grpListener)

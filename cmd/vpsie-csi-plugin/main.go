@@ -16,7 +16,7 @@ import (
 func main() {
 	cfg := driver.Config{}
 
-	flag.StringVar(&cfg.EndPoint, "endpoint","unix://tmp/csi.sock", "CSI endpoint")
+	flag.StringVar(&cfg.EndPoint, "endpoint", "unix://tmp/csi.sock", "CSI endpoint")
 	flag.StringVar(&cfg.Token, "token", "", "vpsie access token")
 	flag.StringVar(&cfg.Url, "url", "", "url of the vpsie api")
 	flag.StringVar(&cfg.DriverName, "driver-name", driver.DefaultDriverName, "Name for the driver.")
@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background( ))
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	c := make(chan os.Signal, 1)
@@ -48,7 +48,7 @@ func main() {
 		cancel()
 	}()
 
-	if err := drvr.Run(ctx); err!= nil {
+	if err := drvr.Run(ctx); err != nil {
 		log.Fatalln(err)
 	}
 }
