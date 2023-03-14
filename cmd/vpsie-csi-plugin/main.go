@@ -18,6 +18,8 @@ func main() {
 
 	flag.StringVar(&cfg.EndPoint, "endpoint", "unix://tmp/csi.sock", "CSI endpoint")
 	flag.StringVar(&cfg.Token, "token", "", "vpsie access token")
+	flag.StringVar(&cfg.ClientID, "clientID", "", "vpsie clint id")
+	flag.StringVar(&cfg.ClientSecret, "clientSecret", "", "vpsie client secret ")
 	flag.StringVar(&cfg.Url, "url", "", "url of the vpsie api")
 	flag.StringVar(&cfg.DriverName, "driver-name", driver.DefaultDriverName, "Name for the driver.")
 	flag.StringVar(&cfg.NodeID, "nodeid", "", "node id")

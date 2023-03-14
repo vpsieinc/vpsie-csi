@@ -7,8 +7,10 @@ import (
 	"net"
 	"sync"
 
+	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"code.k9.ms/vpsie-csi/util"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
 )
@@ -29,11 +31,18 @@ type Config struct {
 	Url         string
 	DataCenter  string
 	Token       string
+
+	ClientID     string
+	ClientSecret string
 }
 
 type Driver struct {
 	srv    *grpc.Server
 	config Config
+
+	storage   govpsie.StorageService
+	account   govpsie.AccountService
+	snapshots govpsie.SnapshotService
 
 	readyMu sync.Mutex // protects ready
 	ready   bool
@@ -53,7 +62,20 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		return nil, errors.New("end point is empty")
 	}
 
-	return &Driver{config: *cfg}, nil
+	ts := tknSource{
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+	}
+	client := govpsie.NewClient(oauth2.NewClient(context.Background(), &ts))
+
+	client.SetUserAgent("vpsie-csi-driver/" + version)
+
+	return &Driver{
+		config:    *cfg,
+		storage:   client.Storage,
+		account:   client.Account,
+		snapshots: client.Snapshot,
+	}, nil
 }
 
 func GetVersion() string {
@@ -81,8 +103,8 @@ func (d *Driver) Run(ctx context.Context) error {
 
 	d.srv = grpc.NewServer(grpc.UnaryInterceptor(logErr))
 	csi.RegisterIdentityServer(d.srv, d)
-	// csi.RegisterControllerServer(d.srv, d)
-	// csi.RegisterNodeServer(d.srv, d)
+	csi.RegisterControllerServer(d.srv, d)
+	csi.RegisterNodeServer(d.srv, d)
 
 	klog.V(4).InfoS("Listening for connections", "address", grpListener.Addr())
 	return d.srv.Serve(grpListener)
