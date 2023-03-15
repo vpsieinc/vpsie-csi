@@ -23,6 +23,7 @@ func main() {
 	flag.StringVar(&cfg.Url, "url", "", "url of the vpsie api")
 	flag.StringVar(&cfg.DriverName, "driver-name", driver.DefaultDriverName, "Name for the driver.")
 	flag.StringVar(&cfg.NodeID, "nodeid", "", "node id")
+	flag.StringVar(&cfg.StorageTag, "storage-tag", "", "Tag Vpsie Storage on Create/Attach.")
 
 	showVersion := flag.Bool("version", false, "Show version.")
 

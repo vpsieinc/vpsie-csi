@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,6 +33,8 @@ const (
 	// defaultVolumeSizeInBytes is used when the user did not provide a size or
 	// the size they provided did not satisfy our requirements
 	defaultVolumeSizeInBytes int64 = 16 * giB
+
+	createdByDO = "Created by Vpsie CSI driver"
 )
 
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -52,15 +55,62 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	klog.Info("create volume called")
 
 	// get volume first, if it's created do no thing
-	volumes, _, err := d.storage.List(ctx, &godo.ListVolumeParams{
-		Region: d.region,
-		Name:   volumeName,
+	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
+		Page:    1,
+		PerPage: 1000,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return nil, status.Errorf(codes.Unimplemented, "method CreateVolume not implemented")
+	for _, volume := range volumes {
+		if volume.Name == volumeName {
+			if int64(volume.Size)*giB != size {
+				return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("invalid option requested size: %d", size))
+			}
+
+			klog.Info("volume already created")
+			return &csi.CreateVolumeResponse{
+				Volume: &csi.Volume{
+					VolumeId:      fmt.Sprint(volume.ID),
+					CapacityBytes: int64(volume.Size) * giB,
+				},
+			}, nil
+		}
+	}
+
+	createStorageRequest := &govpsie.StorageCreateRequest{
+		Name:        volumeName,
+		Size:        int(size) / giB,
+		Description: createdByDO,
+		StorageType: "EX4",
+	}
+	if d.config.StorageTag != "" {
+		createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
+	}
+
+	klog.Infof("volume_req: %s\n , creating volume", createStorageRequest)
+	vol, err := d.storage.Create(ctx, createStorageRequest)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	resp := &csi.CreateVolumeResponse{
+		Volume: &csi.Volume{
+			VolumeId:      vol.ID,
+			CapacityBytes: size,
+			AccessibleTopology: []*csi.Topology{
+				{
+					Segments: map[string]string{
+						"data-center": d.config.DataCenter,
+					},
+				},
+			},
+		},
+	}
+
+	klog.Infof("response: %s, volume was created", resp)
+	return resp, nil
 
 }
 

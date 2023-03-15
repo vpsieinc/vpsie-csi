@@ -31,6 +31,7 @@ type Config struct {
 	Url         string
 	DataCenter  string
 	Token       string
+	StorageTag  string
 
 	ClientID     string
 	ClientSecret string
@@ -39,6 +40,9 @@ type Config struct {
 type Driver struct {
 	srv    *grpc.Server
 	config Config
+	// publishInfoVolumeName is used to pass the volume name from
+	// `ControllerPublishVolume` to `NodeStageVolume or `NodePublishVolume`
+	publishInfoVolumeName string
 
 	storage   govpsie.StorageService
 	account   govpsie.AccountService
@@ -71,10 +75,11 @@ func NewDriver(cfg *Config) (*Driver, error) {
 	client.SetUserAgent("vpsie-csi-driver/" + version)
 
 	return &Driver{
-		config:    *cfg,
-		storage:   client.Storage,
-		account:   client.Account,
-		snapshots: client.Snapshot,
+		config:                *cfg,
+		storage:               client.Storage,
+		account:               client.Account,
+		snapshots:             client.Snapshot,
+		publishInfoVolumeName: cfg.DriverName + "/volume-name",
 	}, nil
 }
 
