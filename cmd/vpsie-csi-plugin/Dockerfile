@@ -1,0 +1,14 @@
+FROM alpine:3.12
+
+RUN apk add --no-cache ca-certificates \
+                       blkid \
+                       e2fsprogs \
+                       e2fsprogs-extra \
+                       findmnt \
+                       parted \
+                       xfsprogs \
+    && rm -rf /var/cache/apk/*
+
+ADD vpsie-csi-plugin /bin/
+
+ENTRYPOINT ["/bin/vpsie-csi-plugin"]

@@ -17,6 +17,7 @@ type StorageService interface {
 	ListAll(ctx context.Context, options *ListOptions) ([]Storage, error)
 	Update(ctx context.Context, updateReq *StorageUpdateRequest) error
 	Create(ctx context.Context, createReq *StorageCreateRequest, vmIdentifier string) error
+	CreateStorage(ctx context.Context, createReq *StorageCreateRequest) error
 }
 
 type storageServiceHandler struct {
@@ -206,5 +207,14 @@ func (s *storageServiceHandler) Create(ctx context.Context, createReq *StorageCr
 		return err
 	}
 
+	return s.client.Do(ctx, req, nil)
+}
+
+func(s *storageServiceHandler) CreateStorage(ctx context.Context, createReq *StorageCreateRequest) error {
+	path := fmt.Sprintf("%s/storages/create", storageBasePath)
+	req, err := s.client.NewRequest(ctx, http.MethodPost, path, createReq)
+	if err!= nil {
+		return err
+	}
 	return s.client.Do(ctx, req, nil)
 }
