@@ -35,8 +35,15 @@ const (
 	defaultVolumeSizeInBytes int64 = 16 * giB
 
 	createdByDO = "Created by Vpsie CSI driver"
+
+	defaultVolumesPageSize = 10
 )
 
+var (
+	supportedAccessMode = &csi.VolumeCapability_AccessMode{
+		Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
+	}
+)
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 
 	if req.Name == "" {
@@ -164,14 +171,13 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	klog.Infof("controller publish volume called, volume_id: %v, node_id: %v", req.VolumeId, req.NodeId)
 
-	// check if vpsie exist before trying to attach the volume to the droplet
-	_, err = d.vpsie.Get(ctx, req.NodeId)
+	_, err := d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
 	if err != nil {
 		return nil, err
 	}
 
 	// attach the volume to the correct node
-	err := d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
+	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
 	if err != nil {
 		return nil, err
 	}
@@ -216,54 +222,28 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 // ListVolumes returns a list of all requested volumes
 func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 	maxEntries := req.MaxEntries
-	if maxEntries == 0 && d.defaultVolumesPageSize > 0 {
-		maxEntries = int32(d.defaultVolumesPageSize)
+	if maxEntries == 0 && defaultVolumesPageSize > 0 {
+		maxEntries = int32(defaultVolumesPageSize)
 	}
 
 	klog.Info("list volumes called, max_entries: %d, req_starting_token %v", req.MaxEntries, req.StartingToken)
 
-	var startingToken int32
-	if req.StartingToken != "" {
-		parsedToken, err := strconv.ParseInt(req.StartingToken, 10, 32)
-		if err != nil {
-			return nil, status.Errorf(codes.Aborted, "ListVolumes starting token %q is not valid: %s", req.StartingToken, err)
-		}
-		startingToken = int32(parsedToken)
-	}
-
-	untypedVolumes, nextToken, err := listResources(ctx, startingToken, maxEntries, func(ctx context.Context, listOpts *govpsie.ListOptions) ([]interface{}, error) {
-
-		volumes, err := d.storage.List(ctx, listOpts)
-		if err != nil {
-			return nil, err
-		}
-
-		untypedVolumes := make([]interface{}, 0, len(volumes))
-		for _, volume := range volumes {
-			untypedVolumes = append(untypedVolumes, volume)
-		}
-		return untypedVolumes, err
-	})
+	volumes, err := d.storage.ListAll(ctx, &govpsie.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("ListVolumes failed to list resources: %w", err)
-	}
-
-	volumes := make([]govpsie.Storage, 0, len(untypedVolumes))
-	for _, untypedVolume := range untypedVolumes {
-		volumes = append(volumes, untypedVolume.(govpsie.Storage))
+		return nil, err
 	}
 
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range volumes {
-		attachedDropletIDs := make([]string, 0, len(vol.DropletIDs))
-		for _, dropletID := range vol.DropletIDs {
+		attachedDropletIDs := make([]string, 0, len(vol.VmIdentifier))
+		for _, dropletID := range vol.VmIdentifier {
 			attachedDropletIDs = append(attachedDropletIDs, strconv.Itoa(dropletID))
 		}
 
 		entries = append(entries, &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
-				VolumeId:      vol.ID,
-				CapacityBytes: vol.SizeGigaBytes * giB,
+				VolumeId:      vol.Identifier,
+				CapacityBytes: int64(vol.Size) * giB,
 			},
 			Status: &csi.ListVolumesResponse_VolumeStatus{
 				PublishedNodeIds: attachedDropletIDs,
@@ -273,10 +253,6 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 
 	resp := &csi.ListVolumesResponse{
 		Entries: entries,
-	}
-
-	if nextToken > 0 {
-		resp.NextToken = strconv.FormatInt(int64(nextToken), 10)
 	}
 
 	return resp, nil

@@ -32,6 +32,7 @@ type Client struct {
 	Account  AccountService
 	Storage  StorageService
 	Snapshot SnapshotService
+	Vpsie VpsieService
 }
 
 type ErrorRsp struct {
@@ -71,6 +72,7 @@ func NewClient(httpClient *http.Client) *Client {
 	c.Account = &accountServiceHandler{client: c}
 	c.Storage = &storageServiceHandler{client: c}
 	c.Snapshot = &snapshotServiceHandler{client: c}
+	c.Vpsie = &vpsieServiceHandler{client: c}
 
 	c.headers = make(map[string]string)
 	return c

@@ -47,6 +47,7 @@ type Driver struct {
 
 	storage   govpsie.StorageService
 	account   govpsie.AccountService
+	vpsie govpsie.VpsieService
 	snapshots govpsie.SnapshotService
 
 	readyMu sync.Mutex // protects ready
@@ -80,6 +81,7 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		storage:               client.Storage,
 		account:               client.Account,
 		snapshots:             client.Snapshot,
+		vpsie: client.Vpsie,
 		publishInfoVolumeName: cfg.DriverName + "/volume-name",
 		mounter:               *newMounter(),
 	}, nil
