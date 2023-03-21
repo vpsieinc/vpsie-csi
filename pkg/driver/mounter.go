@@ -91,7 +91,6 @@ func (m *mounter) Format(source, fsType string) error {
 		mkfsArgs = []string{"-F", source}
 	}
 
-
 	out, err := exec.Command(mkfsCmd, mkfsArgs...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("formatting disk failed: %v cmd: '%s %s' output: %q",
@@ -100,7 +99,6 @@ func (m *mounter) Format(source, fsType string) error {
 
 	return nil
 }
-
 
 func (m *mounter) Mount(source, target, fsType string, opts ...string) error {
 	mountCmd := "mount"
@@ -216,7 +214,6 @@ func (m *mounter) IsMounted(target string) (bool, error) {
 	return targetFound, nil
 }
 
-
 func (m *mounter) IsFormatted(source string) (bool, error) {
 	if source == "" {
 		return false, errors.New("source is not specified")
@@ -232,7 +229,6 @@ func (m *mounter) IsFormatted(source string) (bool, error) {
 	}
 
 	blkidArgs := []string{source}
-
 
 	exitCode := 0
 	cmd := exec.Command(blkidCmd, blkidArgs...)

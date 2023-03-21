@@ -43,7 +43,7 @@ type Driver struct {
 	// publishInfoVolumeName is used to pass the volume name from
 	// `ControllerPublishVolume` to `NodeStageVolume or `NodePublishVolume`
 	publishInfoVolumeName string
-	mounter mounter
+	mounter               mounter
 
 	storage   govpsie.StorageService
 	account   govpsie.AccountService
@@ -81,7 +81,7 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		account:               client.Account,
 		snapshots:             client.Snapshot,
 		publishInfoVolumeName: cfg.DriverName + "/volume-name",
-		mounter: *newMounter(),
+		mounter:               *newMounter(),
 	}, nil
 }
 

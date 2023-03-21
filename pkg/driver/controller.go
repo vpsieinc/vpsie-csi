@@ -141,7 +141,7 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 	}
 
 	klog.Infof("volume %v is deleted", req.VolumeId)
-	
+
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -164,49 +164,22 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	klog.Infof("controller publish volume called, volume_id: %v, node_id: %v", req.VolumeId, req.NodeId)
 
-	// check if volume exist before trying to attach it
-	vol, err := d.storage.Get(ctx, req.VolumeId)
-	if err != nil {
-		return nil, err
-	}
-
 	// check if vpsie exist before trying to attach the volume to the droplet
 	_, err = d.vpsie.Get(ctx, req.NodeId)
 	if err != nil {
 		return nil, err
 	}
 
-	attachedID := 0
-	for _, id := range vol.DropletIDs {
-		attachedID = id
-		if id == dropletID {
-			klog.Info("volume is already attached")
-			return &csi.ControllerPublishVolumeResponse{
-				PublishContext: map[string]string{
-					d.publishInfoVolumeName: vol.Name,
-				},
-			}, nil
-		}
-	}
-
-	// droplet is attached to a different node, return an error
-	if attachedID != 0 {
-		return nil, status.Errorf(codes.FailedPrecondition,
-			"volume %q is attached to the wrong droplet (%d), detach the volume to fix it",
-			req.VolumeId, attachedID)
-	}
-
 	// attach the volume to the correct node
-	err := d.storageActions.Attach(ctx, req.VolumeId, dropletID)
+	err := d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
 	if err != nil {
 		return nil, err
 	}
 
-
 	klog.Info("volume was attached")
 	return &csi.ControllerPublishVolumeResponse{
 		PublishContext: map[string]string{
-			d.publishInfoVolumeName: vol.Name,
+			d.publishInfoVolumeName: req.VolumeId,
 		},
 	}, nil
 }
@@ -225,14 +198,7 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 		return nil, status.Error(codes.InvalidArgument, "ValidateVolumeCapabilities Volume Capabilities must be provided")
 	}
 
-
 	klog.Infof("validate volume capabilities called, volume_id: %v, volume_capabilities: %v", req.VolumeId, req.VolumeCapabilities)
-
-	// check if volume exist before trying to validate it it
-	_, err := d.storage.Get(ctx, req.VolumeId)
-	if err != nil {
-		return nil, err
-	}
 
 	resp := &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
@@ -243,7 +209,7 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 			},
 		},
 	}
-	
+
 	return resp, nil
 }
 
@@ -266,7 +232,7 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	}
 
 	untypedVolumes, nextToken, err := listResources(ctx, startingToken, maxEntries, func(ctx context.Context, listOpts *govpsie.ListOptions) ([]interface{}, error) {
-	
+
 		volumes, err := d.storage.List(ctx, listOpts)
 		if err != nil {
 			return nil, err
@@ -350,7 +316,6 @@ func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRe
 	return nil, status.Errorf(codes.Unimplemented, "method ControllerGetVolume not implemented")
 }
 
-
 func (d *Driver) extractStorage(capRange *csi.CapacityRange) (int64, error) {
 	if capRange == nil {
 		return defaultVolumeSizeInBytes, nil
@@ -427,8 +392,6 @@ func formatBytes(inputBytes int64) string {
 	result = strings.TrimSuffix(result, ".0")
 	return result + unit
 }
-
-
 
 func isValidVolumeContext(volContext map[string]string) bool {
 	//There could be multiple volume attributes in the volumeContext map

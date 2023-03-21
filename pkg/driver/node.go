@@ -18,11 +18,10 @@ import (
 )
 
 const (
-	defaultFsType = FSTypeExt4
+	defaultFsType     = FSTypeExt4
 	maxVolumesPerNode = 7
 
-
-	diskIDPath   = "/dev/disk/by-id"
+	diskIDPath = "/dev/disk/by-id"
 	diskPrefix = "scsi-0DO_Volume_"
 )
 
@@ -79,7 +78,6 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if noFormat {
 		klog.Info("skipping formatting the source device")
 	} else {
-		
 
 		formatted, err := d.mounter.IsFormatted(source)
 		if err != nil {
@@ -170,7 +168,7 @@ func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolu
 	}
 
 	var err error
-	switch  mode := req.GetVolumeCapability().GetAccessType().(type) {
+	switch mode := req.GetVolumeCapability().GetAccessType().(type) {
 	case *csi.VolumeCapability_Block:
 		err = d.nodePublishVolumeForBlock(req, options)
 	case *csi.VolumeCapability_Mount:
@@ -195,7 +193,7 @@ func (d *Driver) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublish
 	if req.TargetPath == "" {
 		return nil, status.Error(codes.InvalidArgument, "NodeUnpublishVolume Target Path must be provided")
 	}
-	
+
 	klog.Info("node unpublish volume called")
 
 	err := d.mounter.Unmount(req.TargetPath)
@@ -366,7 +364,6 @@ func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (
 	}, nil
 }
 
-
 func hasMountOption(options []string, opt string) bool {
 	for _, o := range options {
 		if o == opt {
@@ -394,7 +391,6 @@ func collectMountOptions(fsType string, mntFlags []string) []string {
 	return options
 }
 
-
 func getDeviceByIDPath(volumeName string) string {
 	return filepath.Join(diskIDPath, fmt.Sprintf("%s%s", diskPrefix, volumeName))
 }
@@ -412,7 +408,6 @@ func (d *Driver) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeReques
 	if err != nil {
 		return err
 	}
-
 
 	if !mounted {
 		fsType := mode.Mount.GetFsType()
@@ -436,7 +431,7 @@ func (d *Driver) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeReques
 	return nil
 }
 
-func (d *Driver) nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, mountOptions []string ) error {
+func (d *Driver) nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, mountOptions []string) error {
 	volumeName, ok := req.GetPublishContext()[d.publishInfoVolumeName]
 	if !ok {
 		return status.Error(codes.InvalidArgument, fmt.Sprintf("Could not find the volume name from the publish context %q", d.publishInfoVolumeName))
@@ -466,7 +461,7 @@ func (d *Driver) nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, mo
 	return nil
 }
 
-func  findAbsoluteDeviceByIDPath(volumeID string) (string, error) {
+func findAbsoluteDeviceByIDPath(volumeID string) (string, error) {
 	path := getDeviceByIDPath(volumeID)
 
 	// EvalSymlinks returns relative link if the file is not a symlink
