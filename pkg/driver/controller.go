@@ -262,10 +262,35 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 func (d *Driver) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (d *Driver) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
+	newCap := func(cap csi.ControllerServiceCapability_RPC_Type) *csi.ControllerServiceCapability {
+		return &csi.ControllerServiceCapability{
+			Type: &csi.ControllerServiceCapability_Rpc{
+				Rpc: &csi.ControllerServiceCapability_RPC{
+					Type: cap,
+				},
+			},
+		}
+	}
 
-func (d *Driver) ControllerGetCapabilities(context.Context, *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ControllerGetCapabilities not implemented")
+	var caps []*csi.ControllerServiceCapability
+	for _, cap := range []csi.ControllerServiceCapability_RPC_Type{
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		// csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
+		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES,
+	} {
+		caps = append(caps, newCap(cap))
+	}
 
+	resp := &csi.ControllerGetCapabilitiesResponse{
+		Capabilities: caps,
+	}
+
+	return resp, nil
 }
 
 func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
@@ -283,9 +308,41 @@ func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi
 
 }
 
-func (d *Driver) ControllerExpandVolume(context.Context, *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ControllerExpandVolume not implemented")
+func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+	volID := req.GetVolumeId()
 
+	if volID == "" {
+		return nil, status.Error(codes.InvalidArgument, "ControllerExpandVolume volume ID missing in request")
+	}
+	
+
+	resizeBytes, err := d.extractStorage(req.GetCapacityRange())
+	if err != nil {
+		return nil, status.Errorf(codes.OutOfRange, "ControllerExpandVolume invalid capacity range: %v", err)
+	}
+	resizeGigaBytes := resizeBytes / giB
+
+	klog.Info("controller expand volume called")
+
+
+	if err := d.storage.Update(ctx, &govpsie.StorageUpdateRequest{
+		StorageIdentifier: volID,
+		Size:  int(resizeGigaBytes),
+	}); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed updating storage")
+	}
+
+	klog.Info("volume was resized")
+
+	nodeExpansionRequired := true
+	if req.GetVolumeCapability() != nil {
+		if _, ok := req.GetVolumeCapability().GetAccessType().(*csi.VolumeCapability_Block); ok {
+			klog.Info("node expansion is not required for block volumes")
+			nodeExpansionRequired = false
+		}
+	}
+
+	return &csi.ControllerExpandVolumeResponse{CapacityBytes: resizeGigaBytes * giB, NodeExpansionRequired: nodeExpansionRequired}, nil
 }
 
 func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
