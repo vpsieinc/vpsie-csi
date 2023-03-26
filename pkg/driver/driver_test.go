@@ -67,14 +67,13 @@ func TestSanity(t *testing.T) {
 	})
 
 	
-	config := sanity.TestConfig{
-		Address:          endpoint,
-		CheckPath: fm.checkMountPath,
-		TargetPath:       targetPath,
-		StagingPath:      stagingPath,
-		CreateTargetDir:  createDir,
-		CreateStagingDir: createDir,
-	}
+	config := sanity.NewTestConfig()
+	config.Address = endpoint
+	config.CreateStagingDir = createDir
+	config.CreateStagingDir = createDir
+	config.CheckPath = fm.checkMountPath
+	config.TargetPath = targetPath
+	config.StagingPath = stagingPath
 
 	if err := os.RemoveAll(config.TargetPath); err != nil {
 		t.Fatalf("failed to delete target path %s: %s", config.TargetPath, err)

@@ -109,11 +109,8 @@ func (d *Driver) Run(ctx context.Context) error {
 		}
 		return resp, err
 	}
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(logErr),
-		grpc.WithInsecure(),
-	}
-	d.srv = grpc.NewServer(opts)
+
+	d.srv = grpc.NewServer(grpc.UnaryInterceptor(logErr))
 	csi.RegisterIdentityServer(d.srv, d)
 	csi.RegisterControllerServer(d.srv, d)
 	csi.RegisterNodeServer(d.srv, d)
