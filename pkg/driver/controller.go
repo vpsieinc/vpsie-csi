@@ -235,18 +235,14 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range volumes {
-		attachedDropletIDs := make([]string, 0, len(vol.VmIdentifier))
-		for _, dropletID := range vol.VmIdentifier {
-			attachedDropletIDs = append(attachedDropletIDs, strconv.Itoa(dropletID))
-		}
-
+	
 		entries = append(entries, &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
 				VolumeId:      vol.Identifier,
 				CapacityBytes: int64(vol.Size) * giB,
 			},
 			Status: &csi.ListVolumesResponse_VolumeStatus{
-				PublishedNodeIds: attachedDropletIDs,
+				PublishedNodeIds: []string{vol.VmIdentifier},
 			},
 		})
 	}

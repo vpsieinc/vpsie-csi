@@ -42,12 +42,10 @@ type mounter struct {
 }
 
 type Mounter interface {
-	mount.Interface
 
 	Format(source, fsType string) error
-	// Mount(source, target, fsType string, options ...string) error
+	Mount(source, target, fsType string, options ...string) error
 	Unmount(target string) error
-	IsAttached(target string) (bool, error)
 	IsMounted(target string) (bool, error)
 	IsFormatted(source string) (bool, error)
 	GetDeviceName(mounter mount.Interface, mountPath string) (string, error)
