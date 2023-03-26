@@ -208,7 +208,12 @@ func(m *mockStorage) Create(ctx context.Context, createReq *govpsie.StorageCreat
 func(m *mockStorage) CreateStorage(ctx context.Context, createReq *govpsie.StorageCreateRequest) error {
 	id := randString(12)
 	vol := &govpsie.Storage{
-
+		Identifier: id,
+		Name: createReq.Name,
+		DcIdentifier: createReq.DcIdentifier,
+		Size: createReq.Size,
+		DiskFormat: createReq.DiskFormat,
+		StorageType: createReq.StorageType,
 	}
 
 	m.storages[id] = vol

@@ -34,16 +34,21 @@ var (
 )
 
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	if req.VolumeId == "" {
-		return nil, status.Error(codes.InvalidArgument, "NodeStageVolume Volume ID must be provided")
+	klog.V(4).InfoS("NodeStageVolume: called", "args", *req)
+
+	volumeID := req.GetVolumeId()
+	if len(volumeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
 	}
 
-	if req.StagingTargetPath == "" {
-		return nil, status.Error(codes.InvalidArgument, "NodeStageVolume Staging Target Path must be provided")
+	target := req.GetStagingTargetPath()
+	if len(target) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Staging target not provided")
 	}
 
-	if req.VolumeCapability == nil {
-		return nil, status.Error(codes.InvalidArgument, "NodeStageVolume Volume Capability must be provided")
+	volCap := req.GetVolumeCapability()
+	if volCap == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume capability not provided")
 	}
 
 	klog.Info("node stage volume called")
@@ -63,7 +68,6 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	}
 
 	source := getDeviceByIDPath(volumeName)
-	target := req.StagingTargetPath
 
 	mnt := req.VolumeCapability.GetMount()
 	options := mnt.MountFlags
@@ -270,12 +274,12 @@ func (d *Driver) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeS
 
 func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
-	if len(volumeID) == 0 {
+	if len(volumeID) == 0 || volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "NodeExpandVolume volume ID not provided")
 	}
 
 	volumePath := req.GetVolumePath()
-	if len(volumePath) == 0 {
+	if len(volumePath) == 0 || volumePath == "" {
 		return nil, status.Error(codes.InvalidArgument, "NodeExpandVolume volume path not provided")
 	}
 

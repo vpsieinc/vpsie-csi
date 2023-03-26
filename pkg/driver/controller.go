@@ -10,6 +10,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -50,6 +51,15 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Name must be provided")
 	}
 
+	
+	if req.VolumeCapabilities == nil || len(req.VolumeCapabilities) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "CreateVolume Volume capabilities must be provided")
+	}
+
+	if violations := validateCapabilities(req.VolumeCapabilities); len(violations) > 0 {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("volume capabilities cannot be satisified: %s", strings.Join(violations, "; ")))
+	}
+
 	size, err := d.extractStorage(req.CapacityRange)
 	if err != nil {
 		return nil, status.Errorf(codes.OutOfRange, "invalid capacity range: %v", err)
@@ -79,7 +89,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 			klog.Info("volume already created")
 			return &csi.CreateVolumeResponse{
 				Volume: &csi.Volume{
-					VolumeId:      fmt.Sprint(volume.ID),
+					VolumeId:      volume.Identifier,
 					CapacityBytes: int64(volume.Size) * giB,
 				},
 			}, nil
@@ -171,7 +181,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	klog.Infof("controller publish volume called, volume_id: %v, node_id: %v", req.VolumeId, req.NodeId)
 
-	_, err := d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	_, err := d.getStorage(ctx, req.VolumeId)
+	if err != nil { 
+		return nil, err
+	}
+
+	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
 	if err != nil {
 		return nil, err
 	}
@@ -190,29 +205,58 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}, nil
 }
 
-func (d *Driver) ControllerUnpublishVolume(context.Context, *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ControllerUnpublishVolume not implemented")
+func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	klog.V(4).InfoS("ControllerUnpublishVolume: called", "args", *req)
+	volumeID := req.GetVolumeId()
+	nodeID := req.GetNodeId()
 
+	if len(volumeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
+	}
+
+	if len(nodeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Node ID not provided")
+	}
+
+	_, err := d.getStorage(ctx, req.VolumeId)
+	if err != nil { 
+		return nil, err
+	}
+
+	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := d.storage.DetachToVPSie(ctx, volumeID, nodeID); err != nil {
+		return nil, err
+	}
+
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
-	if req.VolumeId == "" {
-		return nil, status.Error(codes.InvalidArgument, "ValidateVolumeCapabilities Volume ID must be provided")
+	klog.V(4).InfoS("ValidateVolumeCapabilities: called", "args", *req)
+	volumeID := req.GetVolumeId()
+	if len(volumeID) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
 	}
 
-	if req.VolumeCapabilities == nil {
-		return nil, status.Error(codes.InvalidArgument, "ValidateVolumeCapabilities Volume Capabilities must be provided")
+	volCaps := req.GetVolumeCapabilities()
+	if len(volCaps) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Volume capabilities not provided")
+	}
+
+	_, err := d.getStorage(ctx, volumeID)
+	if err != nil { 
+		return nil, err
 	}
 
 	klog.Infof("validate volume capabilities called, volume_id: %v, volume_capabilities: %v", req.VolumeId, req.VolumeCapabilities)
 
 	resp := &csi.ValidateVolumeCapabilitiesResponse{
 		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
-			VolumeCapabilities: []*csi.VolumeCapability{
-				{
-					AccessMode: supportedAccessMode,
-				},
-			},
+			VolumeCapabilities: volCaps,
 		},
 	}
 
@@ -225,6 +269,15 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	if maxEntries == 0 && defaultVolumesPageSize > 0 {
 		maxEntries = int32(defaultVolumesPageSize)
 	}
+
+	// var startingToken int32
+	// if req.StartingToken != "" {
+	// 	parsedToken, err := strconv.ParseInt(req.StartingToken, 10, 32)
+	// 	if err != nil {
+	// 		return nil, status.Errorf(codes.Aborted, "ListVolumes starting token %q is not valid: %s", req.StartingToken, err)
+	// 	}
+	// 	startingToken = int32(parsedToken)
+	// }
 
 	klog.Info("list volumes called, max_entries: %d, req_starting_token %v", req.MaxEntries, req.StartingToken)
 
@@ -338,7 +391,7 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 		}
 	}
 
-	return &csi.ControllerExpandVolumeResponse{CapacityBytes: resizeGigaBytes * giB, NodeExpansionRequired: nodeExpansionRequired}, nil
+	return &csi.ControllerExpandVolumeResponse{CapacityBytes: resizeBytes, NodeExpansionRequired: nodeExpansionRequired}, nil
 }
 
 func (d *Driver) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
@@ -437,4 +490,42 @@ func isValidVolumeContext(volContext map[string]string) bool {
 		}
 	}
 	return true
+}
+
+
+func (d *Driver) getStorage(ctx context.Context, storageIdentifier string) (*govpsie.Storage, error) {
+	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
+		Page:    1,
+		PerPage: 1000,
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	for _, volume := range volumes {
+		if volume.Identifier == storageIdentifier {
+			return &volume, nil
+		}
+	}
+
+	return nil, fmt.Errorf("volume %s not found", storageIdentifier)
+}
+
+func validateCapabilities(caps []*csi.VolumeCapability) []string {
+	violations := sets.NewString()
+	for _, cap := range caps {
+		if cap.GetAccessMode().GetMode() != supportedAccessMode.GetMode() {
+			violations.Insert(fmt.Sprintf("unsupported access mode %s", cap.GetAccessMode().GetMode().String()))
+		}
+
+		accessType := cap.GetAccessType()
+		switch accessType.(type) {
+		case *csi.VolumeCapability_Block:
+		case *csi.VolumeCapability_Mount:
+		default:
+			violations.Insert("unsupported access type")
+		}
+	}
+
+	return violations.List()
 }
