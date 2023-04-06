@@ -183,12 +183,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	_, err := d.getStorage(ctx, req.VolumeId)
 	if err != nil { 
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume do not exist")
+		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 	}
 
 	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Node do not exist")
+		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
 	}
 
 	// attach the volume to the correct node
@@ -243,13 +243,13 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 	}
 
 	volCaps := req.GetVolumeCapabilities()
-	if len(volCaps) == 0 {
+	if len(volCaps) == 0 || volCaps == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capabilities not provided")
 	}
 
 	_, err := d.getStorage(ctx, volumeID)
 	if err != nil { 
-		return nil, status.Error(codes.InvalidArgument, "Volume Not found")
+		return nil, status.Error(codes.NotFound, "Volume Not found")
 	}
 
 	klog.Infof("validate volume capabilities called, volume_id: %v, volume_capabilities: %v", req.VolumeId, req.VolumeCapabilities)

@@ -36,17 +36,17 @@ var (
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	klog.V(4).InfoS("NodeStageVolume: called", "args", *req)
 
-	volumeID := req.GetVolumeId()
-	if len(volumeID) == 0 {
+	volumeID := req.VolumeId
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
 	}
 
-	target := req.GetStagingTargetPath()
-	if len(target) == 0 {
+	target := req.StagingTargetPath
+	if target == "0" {
 		return nil, status.Error(codes.InvalidArgument, "Staging target not provided")
 	}
 
-	volCap := req.GetVolumeCapability()
+	volCap := req.VolumeCapability
 	if volCap == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capability not provided")
 	}
