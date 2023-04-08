@@ -5,32 +5,21 @@ import (
 	"errors"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"code.k9.ms/vpsie-csi/pkg/govpsie"
+	"github.com/google/uuid"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/mount-utils"
 )
 
 func TestSanity(t *testing.T) {
-	// socket := "/tmp/csi.sock"
-	// endpoint := "unix://" + socket
-	// if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
-	// 	t.Fatalf("failed to remove unix domain socket file %s, error: %s", socket, err)
-	// }
-
-	dir, err := os.MkdirTemp("", "sanity-ebs-csi")
-	if err != nil {
-		t.Fatalf("error creating directory %v", err)
+	socket := "/tmp/csi.sock"
+	endpoint := "unix://" + socket
+	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to remove unix domain socket file %s, error: %s", socket, err)
 	}
-	defer os.RemoveAll(dir)
-
-	targetPath := filepath.Join(dir, "mount")
-	stagingPath := filepath.Join(dir, "staging")
-	endpoint := "unix://" + filepath.Join(dir, "csi.sock")
-
 
 	fm := fakeMounter{
 		mounted: map[string]string{},
@@ -68,19 +57,18 @@ func TestSanity(t *testing.T) {
 
 	
 	config := sanity.NewTestConfig()
-	config.Address = endpoint
-	config.CreateStagingDir = createDir
-	config.CreateStagingDir = createDir
-	config.CheckPath = fm.checkMountPath
-	config.TargetPath = targetPath
-	config.StagingPath = stagingPath
-
 	if err := os.RemoveAll(config.TargetPath); err != nil {
 		t.Fatalf("failed to delete target path %s: %s", config.TargetPath, err)
 	}
 	if err := os.RemoveAll(config.StagingPath); err != nil {
 		t.Fatalf("failed to delete staging path %s: %s", config.StagingPath, err)
 	}
+	
+	config.IDGen = &idGenerator{}
+	config.IdempotentCount = 5
+	config.CheckPath = fm.checkMountPath
+	config.Address = endpoint
+
 	// Now call the test suite
 	sanity.Test(t, config)
 
@@ -90,6 +78,7 @@ func TestSanity(t *testing.T) {
 	}
 	
 }
+
 
 func createDir(targetPath string) (string, error) {
 	if err := os.MkdirAll(targetPath, 0300); err != nil {
@@ -163,6 +152,24 @@ func (f *fakeMounter) GetStatistics(volumePath string) (volumeStatistics, error)
 
 func (f *fakeMounter) IsBlockDevice(volumePath string) (bool, error) {
 	return false, nil
+}
+
+type idGenerator struct{}
+
+func (g *idGenerator) GenerateUniqueValidVolumeID() string {
+	return uuid.New().String()
+}
+
+func (g *idGenerator) GenerateInvalidVolumeID() string {
+	return g.GenerateUniqueValidVolumeID()
+}
+
+func (g *idGenerator) GenerateUniqueValidNodeID() string {
+	return g.GenerateInvalidVolumeID()
+}
+
+func (g *idGenerator) GenerateInvalidNodeID() string {
+	return "not-an-integer"
 }
 
 type mockStorage struct {

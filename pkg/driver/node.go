@@ -36,17 +36,17 @@ var (
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	klog.V(4).InfoS("NodeStageVolume: called", "args", *req)
 
-	volumeID := req.VolumeId
+	volumeID := req.GetVolumeId()
 	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID not provided")
 	}
 
-	target := req.StagingTargetPath
-	if target == "0" {
+	target := req.GetStagingTargetPath()
+	if target == "" {
 		return nil, status.Error(codes.InvalidArgument, "Staging target not provided")
 	}
 
-	volCap := req.VolumeCapability
+	volCap := req.GetVolumeCapability()
 	if volCap == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capability not provided")
 	}
@@ -294,7 +294,7 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 	}
 
 	mounted, err := d.mounter.IsMounted(volumePath)
-	if err != nil {
+	if err != nil { 
 		return nil, status.Errorf(codes.Internal, "NodeExpandVolume failed to check if volume path %q is mounted: %s", volumePath, err)
 	}
 
