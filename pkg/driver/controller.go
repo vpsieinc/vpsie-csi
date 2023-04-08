@@ -42,7 +42,7 @@ const (
 
 var (
 	supportedAccessMode = &csi.VolumeCapability_AccessMode{
-		Mode: csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER,
+		Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 	}
 )
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
