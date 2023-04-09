@@ -73,7 +73,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	// get volume first, if it's created do no thing
 	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
-		Page:    1,
+		Page:    0,
 		PerPage: 1000,
 	})
 	if err != nil {
@@ -114,7 +114,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	vol := govpsie.Storage{}
 	storages, err := d.storage.List(ctx, &govpsie.ListOptions{
-		Page:    1,
+		Page:    0,
 		PerPage: 1000,
 	})
 	if err != nil {
@@ -220,12 +220,12 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 
 	_, err := d.getStorage(ctx, req.VolumeId)
 	if err != nil { 
-		return nil, err
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
 	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
 	if err != nil {
-		return nil, err
+		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
 	if err := d.storage.DetachToVPSie(ctx, volumeID, nodeID); err != nil {
@@ -515,7 +515,7 @@ func isValidVolumeContext(volContext map[string]string) bool {
 
 func (d *Driver) getStorage(ctx context.Context, storageIdentifier string) (*govpsie.Storage, error) {
 	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
-		Page:    1,
+		Page:    0,
 		PerPage: 1000,
 	})
 	if err != nil {
