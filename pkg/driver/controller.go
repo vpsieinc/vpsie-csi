@@ -274,21 +274,32 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 		maxEntries = int32(defaultVolumesPageSize)
 	}
 
-	// var startingToken int32
-	// if req.StartingToken != "" {
-	// 	parsedToken, err := strconv.ParseInt(req.StartingToken, 10, 32)
-	// 	if err != nil {
-	// 		return nil, status.Errorf(codes.Aborted, "ListVolumes starting token %q is not valid: %s", req.StartingToken, err)
-	// 	}
-	// 	startingToken = int32(parsedToken)
-	// }
-
-	klog.Info("list volumes called, max_entries: %d, req_starting_token %v", req.MaxEntries, req.StartingToken)
-
-	volumes, err := d.storage.ListAll(ctx, &govpsie.ListOptions{})
-	if err != nil {
-		return nil, err
+	var startingToken int32
+	if req.StartingToken != "" {
+		parsedToken, err := strconv.ParseInt(req.StartingToken, 10, 32)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "ListVolumes starting token %q is not valid: %s", req.StartingToken, err)
+		}
+		startingToken = int32(parsedToken)
 	}
+
+	options := govpsie.ListOptions{
+		Page:   int(startingToken/maxEntries) + 1,
+		PerPage: int(maxEntries),
+	}
+	volumes, err := d.storage.List(ctx,  &options)
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "ListVolumes failed: %s", err)
+	}
+
+	var nextToken int
+	if len(volumes) == int(maxEntries) {
+		nextToken = int(startingToken) + len(volumes)
+	}else{
+		nextToken = 0
+	}
+
+
 
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range volumes {
@@ -304,8 +315,13 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 		})
 	}
 
+	
 	resp := &csi.ListVolumesResponse{
 		Entries: entries,
+	}
+
+	if nextToken > 0 {
+		resp.NextToken = strconv.FormatInt(int64(nextToken), 10)
 	}
 
 	return resp, nil

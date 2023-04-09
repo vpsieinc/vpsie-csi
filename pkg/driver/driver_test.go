@@ -202,7 +202,13 @@ func(m *mockStorage) CreateContainer(ctx context.Context, dcIdentifier string) e
 	return nil
 }
 func(m *mockStorage) ListAll(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.Storage, error) {
-	return nil, nil
+	var storages []govpsie.Storage
+
+	for _, vol := range m.storages {
+		storages = append(storages, *vol)
+	}
+
+	return storages, nil
 }
 func(m *mockStorage) Update(ctx context.Context, updateReq *govpsie.StorageUpdateRequest) error {
 	volume := m.storages[updateReq.StorageIdentifier]
