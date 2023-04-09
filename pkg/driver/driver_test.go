@@ -14,6 +14,7 @@ import (
 	"k8s.io/mount-utils"
 )
 
+const numVpsies = 100
 func TestSanity(t *testing.T) {
 	socket := "/tmp/csi.sock"
 	endpoint := "unix://" + socket
@@ -26,13 +27,27 @@ func TestSanity(t *testing.T) {
 	}
 
 	storags := make(map[string]*govpsie.Storage)
-	vpsies := make(map[string]*govpsie.VmData)
+	vpsies := make(map[string]*govpsie.VmData, numVpsies)
+	nodeID := uuid.New().String()
+	vpsies[nodeID] = &govpsie.VmData{
+		Identifier: nodeID ,
+		ID: 	   0,
+	}
+	
+	for i := 1; i < numVpsies; i++ {
+		var identifier = uuid.New().String()
+		vpsies[identifier] = &govpsie.VmData{
+			Identifier: identifier ,
+			ID: 	   i,
+		}
+	}
+
 
 	driver := &Driver{
 		config: Config{
 			EndPoint: endpoint,
 			DriverName: "fake",
-			NodeID: "vcIdentifier",
+			NodeID: nodeID,
 			DataCenter: "nyc",
 			StorageTag: "",
 			ClientID: "",
@@ -106,7 +121,7 @@ func (f *fakeMounter) Unmount(target string) error {
 	delete(f.mounted, target)
 	return nil
 }
-
+ 
 func (f *fakeMounter) GetDeviceName(_ mount.Interface, mountPath string) (string, error) {
 	if _, ok := f.mounted[mountPath]; ok {
 		return "/mnt/sda1", nil

@@ -356,7 +356,7 @@ func (d *Driver) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabi
 
 func (d *Driver) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
-		NodeId:            "vmIdentifier",
+		NodeId:            d.config.NodeID,
 		MaxVolumesPerNode: maxVolumesPerNode,
 
 		// make sure that the driver works on this particular region only
