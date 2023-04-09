@@ -413,17 +413,12 @@ func (d *Driver) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeReques
 		return err
 	}
 
+	fsType := "ext4"
+	if mnt.FsType != "" {
+		fsType = mnt.FsType
+	}
+	
 	if !mounted {
-		fsType := mode.Mount.GetFsType()
-		if len(fsType) == 0 {
-			fsType = defaultFsType
-		}
-
-		_, ok := ValidFSTypes[strings.ToLower(fsType)]
-		if !ok {
-			return status.Errorf(codes.InvalidArgument, "NodePublishVolume: invalid fstype %s", fsType)
-		}
-
 		klog.Info("mounting the volume")
 		if err := d.mounter.Mount(source, target, fsType, mountOptions...); err != nil {
 			return status.Error(codes.Internal, err.Error())
