@@ -124,7 +124,7 @@ func (f *fakeMounter) Unmount(target string) error {
  
 func (f *fakeMounter) GetDeviceName(_ mount.Interface, mountPath string) (string, error) {
 	if _, ok := f.mounted[mountPath]; ok {
-		return "/mnt/sda1", nil
+		return "/mnt", nil
 	}
 
 	return "", nil
