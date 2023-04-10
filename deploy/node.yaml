@@ -1,0 +1,97 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: vpsie-csi-node
+  namespace: kube-system
+spec: 
+  selector:
+    matchLabels:
+      app: vpsie-csi-node
+  template:
+    metadata:
+      labels:
+        app: vpsie-csi-node
+    spec:
+      serviceAccount: vpsie-csi-node-sa
+      hostNetwork: true
+      containers:
+        - name: csi-driver-registrar
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "rm -rf /registration/vpsie.csi.vpsie.com /registration/vpsie.csi.vpsie.com-reg.sock"]
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/vpsie.csi.vpsie.com/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration
+        - name: vpsie-csi-node
+          image: vpsie/csi-vpsie:latest
+          args:
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet/pods
+              mountPropagation: "Bidirectional"
+            - name: device-dir
+              mountPath: /dev
+      volumes:
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/vpsie.csi.vpsie.com
+            type: DirectoryOrCreate
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-csi-node-role
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-csi-node-driver-registrar-binding
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+subjects:
+  - kind: ServiceAccount
+    name: vpsie-csi-node-sa
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: vpsie-csi-node-role
+  apiGroup: rbac.authorization.k8s.io

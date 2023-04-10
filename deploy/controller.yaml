@@ -1,0 +1,72 @@
+# write deployment for controller
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: vpsie-csi-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpsie-csi-controller
+  template:
+    metadata:
+      labels:
+        app: vpsie-csi-controller
+    spec:
+      serviceAccount: vpsie-csi-controller-sa
+      containers:
+        - name: csi-provisioner
+          image: quay.io/k8scsi/csi-provisioner:v1.6.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--feature-gates=Topology=true"
+            - "--strict-topology"
+            - "--enable-leader-election"
+            - "--leader-election-type=leases"
+            - "--leader-election-namespace=$(PVC_NAMESPACE)"
+            - "--timeout=250s"
+            - "--extra-create-metadata=true"
+            - "--metrics-address=:22011"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: PVC_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-attacher
+          image: quay.io/k8scsi/csi-attacher:v2.1.1
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--leader-election-type=leases"
+            - "--leader-election-namespace=$(PVC_NAMESPACE)"
+            - "--timeout=250s"
+            - "--metrics-address=:22012"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: PVC_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+        - name: csi-snapshotter
+          image: quay.io/k8scsi/csi-snapshotter:v2.1.1
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+            - "--leader-election-type=leases"
+            - "--leader-election-namespace=$(PVC_NAMESPACE)"
+            - "--timeout=250s"

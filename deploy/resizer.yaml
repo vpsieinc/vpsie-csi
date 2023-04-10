@@ -1,0 +1,44 @@
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-external-resizer-role
+  labels: 
+    app.kubernetes.io/name: vpsie-csi-driver
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumes" ]
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims/status" ]
+    verbs: [ "update", "patch" ]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "storageclasses" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "list", "watch", "create", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch" ]
+
+--- 
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-external-resizer-binding
+  labels: 
+    app.kubernetes.io/name: vpsie-csi-driver
+subjects:
+  - kind: ServiceAccount
+    name: vpsie-csi-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: vpsie-external-resizer-role
+  apiGroup: rbac.authorization.k8s.io
