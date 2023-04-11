@@ -2,6 +2,8 @@ apiVersion: storage.k8s.io/v1
 kind: CSIDriver
 metadata:
   name: vpsie.csi.vpsie.com
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
 spec:
   attachRequired: true
   podInfoOnMount: true

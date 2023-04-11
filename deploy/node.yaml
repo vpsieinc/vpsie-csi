@@ -9,13 +9,17 @@ spec:
       app: vpsie-csi-node
   template:
     metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: vpsie-csi-node
       labels:
         app: vpsie-csi-node
+        role: vpsie-csi
     spec:
+      priorityClassName: system-node-critical
       serviceAccount: vpsie-csi-node-sa
       hostNetwork: true
       containers:
-        - name: csi-driver-registrar
+        - name: csi-node-driver-registrar
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
           args:
             - "--v=5"
@@ -40,11 +44,12 @@ spec:
               mountPath: /csi
             - name: registration-dir
               mountPath: /registration
-        - name: vpsie-csi-node
+        - name: vpsie-csi-plugin
           image: vpsie/csi-vpsie:latest
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodeid=$(KUBE_NODE_NAME)"
+            - "--url=https://vpsie.com"
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
@@ -62,10 +67,34 @@ spec:
             - name: device-dir
               mountPath: /dev
       volumes:
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
         - name: plugin-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/vpsie.csi.vpsie.com
+            path: /var/lib/kubelet/plugins/dobs.csi.digitalocean.com
             type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+        - name: udev-rules-dir
+          hostPath:
+            path: /etc/udev/rules.d/
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpsie-csi-node-sa
+  namespace: kube-system
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+    
 ---
 
 kind: ClusterRole
