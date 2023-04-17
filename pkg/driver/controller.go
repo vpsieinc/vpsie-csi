@@ -35,7 +35,7 @@ const (
 	// the size they provided did not satisfy our requirements
 	defaultVolumeSizeInBytes int64 = 16 * giB
 
-	createdByDO = "Created by Vpsie CSI driver"
+	createdByVpsie = "Created by Vpsie CSI driver"
 
 	defaultVolumesPageSize = 10
 )
@@ -98,9 +98,11 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	createStorageRequest := &govpsie.StorageCreateRequest{
 		Name:        volumeName,
-		Size:        int(size) / giB,
-		Description: createdByDO,
-		StorageType: "EX4",
+		DcIdentifier: d.config.DataCenter,
+		DiskFormat: "EXT4",
+		Size:        int(size / giB),
+		Description: createdByVpsie,
+		StorageType: "SATA",
 	}
 	if d.config.StorageTag != "" {
 		createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
@@ -135,7 +137,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 			AccessibleTopology: []*csi.Topology{
 				{
 					Segments: map[string]string{
-						"data-center": d.config.DataCenter,
+						"region": d.config.DataCenter,
 					},
 				},
 			},

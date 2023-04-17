@@ -57,6 +57,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
           imagePullPolicy: "IfNotPresent"
           volumeMounts:
             - name: plugin-dir

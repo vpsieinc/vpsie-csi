@@ -1,0 +1,418 @@
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: vpsie.csi.vpsie.com
+spec:
+  attachRequired: true
+  podInfoOnMount: true
+---
+# write deployment for controller
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-vpsie-controller
+  namespace: default
+  labels:
+    app.kubernetes.io/name: vpsie-csi-driver
+spec: 
+  serviceName: "csi-vpsie"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csi-vpsie-controller 
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: csi-vpsie-plugin
+      labels:
+        app: csi-vpsie-controller
+        role: csi-vpsie
+    spec:
+      priorityClassName: system-cluster-critical
+      serviceAccount: csi-vpsie-controller-sa
+      containers:
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v3.4.0
+          args:
+            - "--csi-address=$(ADDRESS)"
+            - "--v=5"
+            - "--default-fstype=ext4"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.1.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.7.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS     
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-vpsie-plugin
+          image: natnaeldocker/csi-vpsie:latest
+          args:
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(NODEID)"
+            - "--clientID=$(CLIENTID)"
+            - "--clientSecret=$(CLIENTSECRET)"
+            - "--url=$(URL)"
+            - "--token=$(TOKEN)"
+            - "--datacenter=$(DATACENTER)"
+          env:
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: token
+            - name: CSI_ENDPOINT
+              value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+            - name: NODEID
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: nodeid
+            - name: DATACENTER
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: datacenter
+            - name: CLIENTID
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: clientID
+            - name: CLIENTSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: clientSecret
+            - name: URL
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: url
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: csi-vpsie-controller-sa
+  namespace: default
+
+---
+
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: vpsie-csi-node
+  namespace: default
+spec: 
+  selector:
+    matchLabels:
+      app: vpsie-csi-node
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: csi-vpsie-plugin
+      labels:
+        app: vpsie-csi-node
+        role: vpsie-csi
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccount: vpsie-csi-node-sa
+      hostNetwork: true
+      initContainers:
+        - name: automount-udev-deleter
+          image: alpine:3.14
+          args:
+            - "rm"
+            - "-f"
+            - "/etc/udev/rules.d/99-digitalocean-automount.rules"
+          volumeMounts:
+            - name: udev-rules-dir
+              mountPath: /etc/udev/rules.d/          
+      containers:
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "rm -rf /registration/vpsie.csi.vpsie.com /registration/vpsie.csi.vpsie.com-reg.sock"]
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: /var/lib/kubelet/plugins/vpsie.csi.vpsie.com/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: registration-dir
+              mountPath: /registration/
+        - name: csi-vpsie-plugin
+          image: natnaeldocker/csi-vpsie:latest
+          args:
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(NODEID)"
+            - "--clientID=$(CLIENTID)"
+            - "--clientSecret=$(CLIENTSECRET)"
+            - "--token=$(TOKEN)"
+            - "--url=https://vpsie.com"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: NODEID
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: nodeid
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: token
+            - name: CLIENTID
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: clientID
+            - name: CLIENTSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: clientSecret
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: /var/lib/kubelet
+              mountPropagation: "Bidirectional"
+            - name: device-dir
+              mountPath: /dev
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
+        - name: plugin-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/vpsie.csi.vpsie.com
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+        - name: udev-rules-dir
+          hostPath:
+            path: /etc/udev/rules.d/
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vpsie-csi-node-sa
+  namespace: default
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+    
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-provisioner-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "csinodes" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "get", "list", "watch" ]
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-provisioner-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-vpsie-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-vpsie-provisioner-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-resizer-role
+  labels: 
+    app.kubernetes.io/name: vpsie-csi-driver
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumes" ]
+    verbs: [ "get", "list", "watch", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "persistentvolumeclaims/status" ]
+    verbs: [ "update", "patch" ]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "storageclasses" ]
+    verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "list", "watch", "create", "update", "patch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch" ]
+
+--- 
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-resizer-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-vpsie-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-vpsie-resizer-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-attacher-role
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments/status"]
+    verbs: ["patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-attacher-binding
+subjects:
+  - kind: ServiceAccount
+    name: csi-vpsie-controller-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: csi-vpsie-attacher-role
+  apiGroup: rbac.authorization.k8s.io
+# node roles
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-csi-node-driver-registrar-role
+  namespace: default
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: vpsie-csi-node-driver-registrar-binding
+  labels:
+    api.kubernetes.io/name: vpsie-csi-driver
+subjects:
+  - kind: ServiceAccount
+    name: vpsie-csi-node-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: vpsie-csi-node-driver-registrar-role
+  apiGroup: rbac.authorization.k8s.io

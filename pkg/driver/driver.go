@@ -11,12 +11,13 @@ import (
 	"code.k9.ms/vpsie-csi/util"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
 )
 
 const (
-	DefaultDriverName = "vpsie.csi"
+	DefaultDriverName = "vpsie.csi.vpsie.com"
 )
 
 var (
@@ -98,7 +99,9 @@ func (d *Driver) Run(ctx context.Context) error {
 		return err
 	}
 
-	grpListener, err := net.Listen(scheme, addr)
+	klog.V(4).InfoS("Listening for connections", "scheme", scheme, "address", addr)
+
+	grpcListener, err := net.Listen(scheme, addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
@@ -116,8 +119,25 @@ func (d *Driver) Run(ctx context.Context) error {
 	csi.RegisterControllerServer(d.srv, d)
 	csi.RegisterNodeServer(d.srv, d)
 
-	klog.V(4).InfoS("Listening for connections", "address", grpListener.Addr())
-	return d.srv.Serve(grpListener)
+	var eg errgroup.Group
+
+	
+	d.ready = true
+
+	eg.Go(func() error {
+		go func() {
+			<-ctx.Done()
+			klog.V(4).InfoS("server stopped")
+			d.readyMu.Lock()
+			d.ready = false
+			d.readyMu.Unlock()
+			d.srv.GracefulStop()
+		}()
+		klog.V(4).InfoS("Listening for connections", "address", grpcListener.Addr())
+		return d.srv.Serve(grpcListener)
+	})
+
+	return eg.Wait()
 }
 
 func (d *Driver) Stop() {

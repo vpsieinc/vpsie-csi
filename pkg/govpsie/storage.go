@@ -211,9 +211,16 @@ func (s *storageServiceHandler) Create(ctx context.Context, createReq *StorageCr
 }
 
 func(s *storageServiceHandler) CreateStorage(ctx context.Context, createReq *StorageCreateRequest) error {
-	path := fmt.Sprintf("%s/storages/create", storageBasePath)
-	req, err := s.client.NewRequest(ctx, http.MethodPost, path, createReq)
-	if err!= nil {
+	path := fmt.Sprintf("%s/storages/create/multiple", storageBasePath)
+	fullReq := struct {
+		Storages []StorageCreateRequest `json:"storages"`
+	}{
+		Storages: []StorageCreateRequest{
+			*createReq,
+		},
+	}
+	req, err := s.client.NewRequest(ctx, http.MethodPost, path, fullReq)
+	if err != nil {
 		return err
 	}
 	return s.client.Do(ctx, req, nil)
