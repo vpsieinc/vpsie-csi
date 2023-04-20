@@ -66,7 +66,6 @@ type StorageCreateRequest struct {
 	Size         int      `json:"size"`
 	StorageType  string   `json:"storageType"`
 	DiskFormat   string   `json:"diskFormat"`
-	Tags         []string `json:"tags"`
 	IsAutomatic  int      `json:"isAutomatic"`
 }
 

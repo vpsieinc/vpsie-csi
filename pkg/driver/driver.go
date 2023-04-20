@@ -70,11 +70,12 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		return nil, errors.New("end point is empty")
 	}
 
-	ts := tknSource{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-	}
-	client := govpsie.NewClient(oauth2.NewClient(context.Background(), &ts))
+	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: cfg.Token,
+	})
+
+
+	client := govpsie.NewClient(oauth2.NewClient(context.Background(), tokenSource))
 
 	client.SetUserAgent("vpsie-csi-driver/" + version)
 

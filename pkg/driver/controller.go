@@ -103,10 +103,11 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Size:        int(size / giB),
 		Description: createdByVpsie,
 		StorageType: "SATA",
+		IsAutomatic: 1,
 	}
-	if d.config.StorageTag != "" {
-		createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
-	}
+	// if d.config.StorageTag != "" {
+	// 	createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
+	// }
 
 	klog.Infof("volume_req: %s\n , creating volume", createStorageRequest)
 	err = d.storage.CreateStorage(ctx, createStorageRequest)
