@@ -124,7 +124,7 @@ func (s *storageServiceHandler) AttachToVPSie(ctx context.Context, storageIdenti
 
 func (s *storageServiceHandler) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
 
-	path := fmt.Sprintf("%s/vm/detach", storageBasePath)
+	path := fmt.Sprintf("%s/storages/vm/detach", storageBasePath)
 
 	detachReq := struct {
 		StorageIdentifier string `json:"storageIdentifier"`
