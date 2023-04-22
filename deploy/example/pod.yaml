@@ -6,10 +6,10 @@ spec:
   containers:
     - name: csi-pod
       image: busybox
-      command: [ "sleep", "1000000" ]
       volumeMounts:
-        - name: csi-vol
-          mountPath: /data
+        - mountPath: "/data"
+          name: csi-vol
+      command: [ "sleep", "1000000" ]
   volumes:
     - name: csi-vol
       persistentVolumeClaim:

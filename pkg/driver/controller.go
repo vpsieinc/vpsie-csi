@@ -165,6 +165,7 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
+
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
@@ -197,7 +198,8 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	// attach the volume to the correct node
 	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
 	if err != nil {
-		return nil, err
+		klog.Errorf("failed to attach volume: %v", err)
+		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
 	}
 
 	klog.Info("volume was attached")

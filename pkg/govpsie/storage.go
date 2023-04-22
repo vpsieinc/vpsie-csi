@@ -103,8 +103,7 @@ func (s *storageServiceHandler) Delete(ctx context.Context, storageIdentifier st
 }
 
 func (s *storageServiceHandler) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
-
-	path := fmt.Sprintf("%s/vm/attach", storageBasePath)
+	path := fmt.Sprintf("%s/storages/vm/attach", storageBasePath)
 
 	attachReq := struct {
 		StorageIdentifier string `json:"storageIdentifier"`
