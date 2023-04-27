@@ -53,13 +53,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 
 	klog.Info("node stage volume called")
 
-	volumeName := ""
-	if volName, ok := req.GetPublishContext()[d.publishInfoVolumeName]; !ok {
-		return nil, status.Error(codes.InvalidArgument, "Could not find the volume by name")
-	} else {
-		volumeName = volName
-	}
-
+	
 	// If it is a block volume, we do nothing for stage volume
 	// because we bind mount the absolute device path to a file
 	switch req.VolumeCapability.GetAccessType().(type) {
@@ -67,7 +61,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return &csi.NodeStageVolumeResponse{}, nil
 	}
 
-	source := getDeviceByIDPath(volumeName)
+	source := getDeviceByIDPath(volumeID)
 
 	mnt := req.VolumeCapability.GetMount()
 	options := mnt.MountFlags
