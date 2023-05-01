@@ -10,6 +10,7 @@ var vpsieBasePath = "/apps/v2/vm"
 
 type VpsieService interface {
 	ListVpsie(context.Context, *ListOptions, string) ([]VmData, error)
+	List(context.Context, *ListOptions) ([]VmData, error)
 	GetVpsieByIdentifier(context.Context, string) (*VmData, error)
 	GetVpsieStatusByIdentifier(context.Context, string) (*Status, error)
 	GetVpsieConsole(ctx context.Context, identifierId string) (*VpsieConsole, error)
@@ -194,6 +195,21 @@ type VpcRequest struct {
 	VmIdentifier string `json:"vmIdentifier"`
 	VpcId        string `json:"vpcId"`
 	DcIdentifier string `json:"dcIdentifier"`
+}
+
+func (v *vpsieServiceHandler) List(ctx context.Context, options *ListOptions) ([]VmData, error) {
+	path := fmt.Sprintf("%s", vpsieBasePath)
+	req, err := v.client.NewRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	vpsies := new(ListVpsieRoot)
+	if err = v.client.Do(ctx, req, vpsies); err != nil {
+		return nil, err
+	}
+
+	return vpsies.Data, nil
 }
 
 func (v *vpsieServiceHandler) ListVpsie(ctx context.Context, options *ListOptions, projectId string) ([]VmData, error) {

@@ -39,6 +39,22 @@ type volumeStatistics struct {
 
 type mounter struct {
 	kMounter *mount.SafeFormatAndMount
+	attachmentValidator AttachmentValidator
+}
+
+type prodAttachmentValidator struct{}
+
+func (av *prodAttachmentValidator) readFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+func (av *prodAttachmentValidator) evalSymlinks(path string) (string, error) {
+	return filepath.EvalSymlinks(path)
+}
+
+type AttachmentValidator interface {
+	readFile(name string) ([]byte, error)
+	evalSymlinks(path string) (string, error)
 }
 
 type Mounter interface {
@@ -47,6 +63,7 @@ type Mounter interface {
 	Mount(source, target, fsType string, options ...string) error
 	Unmount(target string) error
 	IsMounted(target string) (bool, error)
+	IsAttached(source string) error
 	IsFormatted(source string) (bool, error)
 	GetDeviceName(mounter mount.Interface, mountPath string) (string, error)
 	GetStatistics(volumePath string) (volumeStatistics, error)
@@ -61,6 +78,7 @@ func newMounter() *mounter {
 
 	return &mounter{
 		kMounter: kMounter,
+		attachmentValidator: &prodAttachmentValidator{},
 	}
 }
 func (m *mounter) Format(source, fsType string) error {
@@ -154,6 +172,30 @@ func (m *mounter) Mount(source, target, fsType string, opts ...string) error {
 
 func (m *mounter) Unmount(target string) error {
 	return mount.CleanupMountPoint(target, m.kMounter, true)
+}
+
+func (m *mounter) IsAttached(source string) error {
+	out, err := m.attachmentValidator.evalSymlinks(source)
+	if err != nil {
+		return fmt.Errorf("error evaluating the symbolic link %q: %s", source, err)
+	}
+
+	_, deviceName := filepath.Split(out)
+	if deviceName == "" {
+		return fmt.Errorf("error device name is empty for path %s", out)
+	}
+
+	deviceStateFilePath := fmt.Sprintf("/sys/class/block/%s/device/state", deviceName)
+	deviceStateFileContent, err := m.attachmentValidator.readFile(deviceStateFilePath)
+	if err != nil {
+		return fmt.Errorf("error reading the device state file %q: %s", deviceStateFilePath, err)
+	}
+
+	if string(deviceStateFileContent) != strings.TrimSpace("running") {
+		return fmt.Errorf("error comparing the state file content, expected: %s, got: %s", "running", string(deviceStateFileContent))
+	}
+
+	return nil
 }
 
 func (m *mounter) IsMounted(target string) (bool, error) {

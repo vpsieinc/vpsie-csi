@@ -75,7 +75,7 @@ spec:
           env:
             - name: ADDRESS     
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -83,12 +83,10 @@ spec:
           image: natnaeldocker/csi-vpsie:latest
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--nodeid=$(NODEID)"
             - "--clientID=$(CLIENTID)"
             - "--clientSecret=$(CLIENTSECRET)"
             - "--url=$(URL)"
             - "--token=$(TOKEN)"
-            - "--datacenter=$(DATACENTER)"
           env:
             - name: TOKEN
               valueFrom:
@@ -97,16 +95,6 @@ spec:
                   key: token
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
-            - name: NODEID
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: nodeid
-            - name: DATACENTER
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: datacenter
             - name: CLIENTID
               valueFrom:
                 secretKeyRef:
@@ -122,7 +110,15 @@ spec:
                 secretKeyRef:
                   name: vpsie-secret
                   key: url
-          imagePullPolicy: "IfNotPresent"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOSTIP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -198,7 +194,6 @@ spec:
           image: natnaeldocker/csi-vpsie:latest
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--nodeid=$(NODEID)"
             - "--clientID=$(CLIENTID)"
             - "--clientSecret=$(CLIENTSECRET)"
             - "--token=$(TOKEN)"
@@ -206,11 +201,6 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
-            - name: NODEID
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: nodeid
             - name: TOKEN
               valueFrom:
                 secretKeyRef:
@@ -226,7 +216,15 @@ spec:
                 secretKeyRef:
                   name: vpsie-secret
                   key: clientSecret
-          imagePullPolicy: "IfNotPresent"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: HOSTIP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          imagePullPolicy: "Always"
           securityContext:
             privileged: true
             capabilities:
@@ -342,6 +340,9 @@ rules:
   - apiGroups: [ "" ]
     resources: [ "pods" ]
     verbs: [ "get", "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "nodes" ]
+    verbs: [ "get", "list", "watch" ]
 
 --- 
 
@@ -380,6 +381,9 @@ rules:
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments/status"]
     verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]  
 
 ---
 
@@ -410,6 +414,19 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csinodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  
 
 ---
 

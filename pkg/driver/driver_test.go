@@ -252,6 +252,16 @@ type mockVpsie struct {
 	vpsies map[string]*govpsie.VmData
 }
 
+func (m *mockVpsie) List(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.VmData, error) {
+	var vpsies []govpsie.VmData
+
+	for _, vol := range m.vpsies {
+		vpsies = append(vpsies, *vol)
+	}
+
+	return vpsies, nil
+}
+
 func(m *mockVpsie) ListVpsie(context.Context, *govpsie.ListOptions, string) ([]govpsie.VmData, error) {
 	return nil, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 
 	"code.k9.ms/vpsie-csi/pkg/govpsie"
@@ -32,8 +33,7 @@ type Config struct {
 	Url         string
 	DataCenter  string
 	Token       string
-	StorageTag  string               
-
+	StorageTag  string
 
 	ClientID     string
 	ClientSecret string
@@ -49,7 +49,7 @@ type Driver struct {
 
 	storage   govpsie.StorageService
 	account   govpsie.AccountService
-	vpsie govpsie.VpsieService
+	vpsie     govpsie.VpsieService
 	snapshots govpsie.SnapshotService
 
 	readyMu sync.Mutex // protects ready
@@ -57,6 +57,7 @@ type Driver struct {
 }
 
 func NewDriver(cfg *Config) (*Driver, error) {
+
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name is empty")
 	}
@@ -74,7 +75,6 @@ func NewDriver(cfg *Config) (*Driver, error) {
 	// 	AccessToken: cfg.Token,
 	// })
 
-
 	// client := govpsie.NewClient(oauth2.NewClient(context.Background(), tokenSource))
 	ts := tknSource{
 		ClientID:     cfg.ClientID,
@@ -84,12 +84,35 @@ func NewDriver(cfg *Config) (*Driver, error) {
 
 	client.SetUserAgent("vpsie-csi-driver/" + version)
 
+	hostName := os.Getenv("HOSTNAME")
+
+	vpsie := client.Vpsie
+	// list all vpsies and search for specific one by name hostName
+	vpsies, err := vpsie.List(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var curentVpsie *govpsie.VmData
+	for _, vpsie := range vpsies {
+		if vpsie.Hostname == hostName {
+			curentVpsie = &vpsie
+			break
+		}
+	}
+
+	if curentVpsie == nil || curentVpsie.Hostname == "" {
+		return nil, fmt.Errorf("vpsie with name %s not found", hostName)
+	}
+	
+	cfg.NodeID = curentVpsie.Identifier
+	cfg.DataCenter = curentVpsie.DcIdentifier
+
 	return &Driver{
 		config:                *cfg,
 		storage:               client.Storage,
 		account:               client.Account,
 		snapshots:             client.Snapshot,
-		vpsie: client.Vpsie,
+		vpsie:                 vpsie,
 		publishInfoVolumeName: cfg.DriverName + "/volume-name",
 		mounter:               newMounter(),
 	}, nil
@@ -127,7 +150,6 @@ func (d *Driver) Run(ctx context.Context) error {
 
 	var eg errgroup.Group
 
-	
 	d.ready = true
 
 	eg.Go(func() error {

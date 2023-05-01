@@ -53,7 +53,6 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 
 	klog.Info("node stage volume called")
 
-	
 	// If it is a block volume, we do nothing for stage volume
 	// because we bind mount the absolute device path to a file
 	switch req.VolumeCapability.GetAccessType().(type) {
@@ -76,20 +75,25 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if noFormat {
 		klog.Info("skipping formatting the source device")
 	} else {
+		klog.Info("skipping formatting the source device in node stage volume")
 
-		formatted, err := d.mounter.IsFormatted(source)
-		if err != nil {
-			return nil, err
-		}
+		// if err := d.mounter.IsAttached(source); err != nil {
+		// 	return nil, fmt.Errorf("error retrieving the attachement status %q: %s", source, err)
+		// }
 
-		if !formatted {
-			klog.Info("formatting the volume for staging")
-			if err := d.mounter.Format(source, fsType); err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-		} else {
-			klog.Info("source device is already formatted")
-		}
+		// formatted, err := d.mounter.IsFormatted(source)
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		// if !formatted {
+		// 	klog.Info("formatting the volume for staging")
+		// 	if err := d.mounter.Format(source, fsType); err != nil {
+		// 		return nil, status.Error(codes.Internal, err.Error())
+		// 	}
+		// } else {
+		// 	klog.Info("source device is already formatted")
+		// }
 	}
 
 	klog.Info("mounting the volume for staging")
@@ -288,7 +292,7 @@ func (d *Driver) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolume
 	}
 
 	mounted, err := d.mounter.IsMounted(volumePath)
-	if err != nil { 
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "NodeExpandVolume failed to check if volume path %q is mounted: %s", volumePath, err)
 	}
 
@@ -411,7 +415,7 @@ func (d *Driver) nodePublishVolumeForFileSystem(req *csi.NodePublishVolumeReques
 	if mnt.FsType != "" {
 		fsType = mnt.FsType
 	}
-	
+
 	if !mounted {
 		klog.Info("mounting the volume")
 		if err := d.mounter.Mount(source, target, fsType, mountOptions...); err != nil {
