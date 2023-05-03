@@ -1,10 +1,13 @@
 package driver
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -45,13 +48,13 @@ var (
 		Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 	}
 )
+
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 
 	if req.Name == "" {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Name must be provided")
 	}
 
-	
 	if req.VolumeCapabilities == nil || len(req.VolumeCapabilities) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "CreateVolume Volume capabilities must be provided")
 	}
@@ -97,13 +100,13 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	}
 
 	createStorageRequest := &govpsie.StorageCreateRequest{
-		Name:        volumeName,
+		Name:         volumeName,
 		DcIdentifier: d.config.DataCenter,
-		DiskFormat: "EXT4",
-		Size:        int(size / giB),
-		Description: createdByVpsie,
-		StorageType: "SATA",
-		IsAutomatic: 1,
+		DiskFormat:   "EXT4",
+		Size:         int(size / giB),
+		Description:  createdByVpsie,
+		StorageType:  "SATA",
+		IsAutomatic:  1,
 	}
 	// if d.config.StorageTag != "" {
 	// 	createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
@@ -165,7 +168,6 @@ func (d *Driver) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest)
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
-
 func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	if req.VolumeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
@@ -186,13 +188,18 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	klog.Infof("controller publish volume called, volume_id: %v, node_id: %v", req.VolumeId, req.NodeId)
 
 	_, err := d.getStorage(ctx, req.VolumeId)
-	if err != nil { 
+	if err != nil {
 		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 	}
 
 	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
+	}
+
+	before, err := ListBlockDevices()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list block devices before attaching storage: %v", err)
 	}
 
 	// attach the volume to the correct node
@@ -202,10 +209,30 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
 	}
 
+	time.Sleep(5 * time.Second)
+
+	after, err := ListBlockDevices()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list block devices after attaching storage: %v", err)
+	}
+
+	var device string
+	for _, dev := range after {
+		if !contains(before, dev) {
+			device = dev
+			break
+		}
+	}
+
+	if device == "" {
+		return nil, fmt.Errorf("failed to identify newly attached device")
+	}
+
 	klog.Info("volume was attached")
 	return &csi.ControllerPublishVolumeResponse{
 		PublishContext: map[string]string{
 			d.publishInfoVolumeName: req.VolumeId,
+			DevicePathKey:           device,
 		},
 	}, nil
 }
@@ -224,7 +251,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 	}
 
 	_, err := d.getStorage(ctx, req.VolumeId)
-	if err != nil { 
+	if err != nil {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
@@ -253,7 +280,7 @@ func (d *Driver) ValidateVolumeCapabilities(ctx context.Context, req *csi.Valida
 	}
 
 	_, err := d.getStorage(ctx, volumeID)
-	if err != nil { 
+	if err != nil {
 		return nil, status.Error(codes.NotFound, "Volume Not found")
 	}
 
@@ -289,10 +316,10 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	}
 
 	options := govpsie.ListOptions{
-		Page:   int(startingToken/maxEntries) + 1,
+		Page:    int(startingToken/maxEntries) + 1,
 		PerPage: int(maxEntries),
 	}
-	volumes, err := d.storage.List(ctx,  &options)
+	volumes, err := d.storage.List(ctx, &options)
 	if err != nil {
 		return nil, status.Errorf(codes.Aborted, "ListVolumes failed: %s", err)
 	}
@@ -300,15 +327,13 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 	var nextToken int
 	if len(volumes) == int(maxEntries) {
 		nextToken = int(startingToken) + len(volumes)
-	}else{
+	} else {
 		nextToken = 0
 	}
 
-
-
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range volumes {
-	
+
 		entries = append(entries, &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
 				VolumeId:      vol.Identifier,
@@ -320,7 +345,6 @@ func (d *Driver) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (
 		})
 	}
 
-	
 	resp := &csi.ListVolumesResponse{
 		Entries: entries,
 	}
@@ -388,7 +412,6 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 	if volID == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerExpandVolume volume ID missing in request")
 	}
-	
 
 	resizeBytes, err := d.extractStorage(req.GetCapacityRange())
 	if err != nil {
@@ -398,10 +421,9 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 
 	klog.Info("controller expand volume called")
 
-
 	if err := d.storage.Update(ctx, &govpsie.StorageUpdateRequest{
 		StorageIdentifier: volID,
-		Size:  int(resizeGigaBytes),
+		Size:              int(resizeGigaBytes),
 	}); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed updating storage")
 	}
@@ -517,7 +539,6 @@ func isValidVolumeContext(volContext map[string]string) bool {
 	return true
 }
 
-
 func (d *Driver) getStorage(ctx context.Context, storageIdentifier string) (*govpsie.Storage, error) {
 	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
 		Page:    0,
@@ -553,4 +574,32 @@ func validateCapabilities(caps []*csi.VolumeCapability) []string {
 	}
 
 	return violations.List()
+}
+
+func ListBlockDevices() ([]string, error) {
+	var devices []string
+
+	// Use 'lsblk' command to list block devices
+	cmd := exec.Command("lsblk", "-o", "NAME", "-n", "-d")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list block devices: %v", err)
+	}
+
+	// Extract device names from output
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		devices = append(devices, strings.TrimSpace(line))
+	}
+
+	return devices, nil
+}
+
+func contains(slice []string, target string) bool {
+	for _, value := range slice {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

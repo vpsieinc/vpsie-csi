@@ -60,7 +60,7 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return &csi.NodeStageVolumeResponse{}, nil
 	}
 
-	source := getDeviceByIDPath(volumeID)
+	source := req.PublishContext[DevicePathKey]
 
 	mnt := req.VolumeCapability.GetMount()
 	options := mnt.MountFlags

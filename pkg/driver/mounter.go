@@ -38,7 +38,7 @@ type volumeStatistics struct {
 }
 
 type mounter struct {
-	kMounter *mount.SafeFormatAndMount
+	kMounter            *mount.SafeFormatAndMount
 	attachmentValidator AttachmentValidator
 }
 
@@ -58,7 +58,6 @@ type AttachmentValidator interface {
 }
 
 type Mounter interface {
-
 	Format(source, fsType string) error
 	Mount(source, target, fsType string, options ...string) error
 	Unmount(target string) error
@@ -77,7 +76,7 @@ func newMounter() *mounter {
 	}
 
 	return &mounter{
-		kMounter: kMounter,
+		kMounter:            kMounter,
 		attachmentValidator: &prodAttachmentValidator{},
 	}
 }

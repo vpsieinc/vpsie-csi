@@ -61,9 +61,6 @@ func NewDriver(cfg *Config) (*Driver, error) {
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name is empty")
 	}
-	if cfg.NodeID == "" {
-		return nil, errors.New("node id is empty")
-	}
 	if cfg.Token == "" {
 		return nil, errors.New("token is empty")
 	}
@@ -103,7 +100,7 @@ func NewDriver(cfg *Config) (*Driver, error) {
 	if curentVpsie == nil || curentVpsie.Hostname == "" {
 		return nil, fmt.Errorf("vpsie with name %s not found", hostName)
 	}
-	
+
 	cfg.NodeID = curentVpsie.Identifier
 	cfg.DataCenter = curentVpsie.DcIdentifier
 

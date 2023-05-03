@@ -10,5 +10,7 @@ const (
 )
 
 const (
-	noFormatKey = "com.vpsie.csi.dobs/noformat"
+	noFormatKey = "com.vpsie.csi/noformat"
+
+	DevicePathKey = "devicepath"
 )
