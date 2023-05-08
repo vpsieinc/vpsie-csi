@@ -57,6 +57,7 @@ type Driver struct {
 }
 
 func NewDriver(cfg *Config) (*Driver, error) {
+	printNodeInfo()
 
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name is empty")
@@ -103,6 +104,8 @@ func NewDriver(cfg *Config) (*Driver, error) {
 
 	cfg.NodeID = curentVpsie.Identifier
 	cfg.DataCenter = curentVpsie.DcIdentifier
+
+	klog.Info("datacenter: ", cfg.DataCenter)
 
 	return &Driver{
 		config:                *cfg,

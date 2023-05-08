@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 	utilexec "k8s.io/utils/exec"
 
@@ -184,15 +185,7 @@ func (m *mounter) IsAttached(source string) error {
 		return fmt.Errorf("error device name is empty for path %s", out)
 	}
 
-	deviceStateFilePath := fmt.Sprintf("/sys/class/block/%s/device/state", deviceName)
-	deviceStateFileContent, err := m.attachmentValidator.readFile(deviceStateFilePath)
-	if err != nil {
-		return fmt.Errorf("error reading the device state file %q: %s", deviceStateFilePath, err)
-	}
 
-	if string(deviceStateFileContent) != strings.TrimSpace("running") {
-		return fmt.Errorf("error comparing the state file content, expected: %s, got: %s", "running", string(deviceStateFileContent))
-	}
 
 	return nil
 }
@@ -316,34 +309,34 @@ func (m *mounter) GetStatistics(volumePath string) (volumeStatistics, error) {
 		}, nil
 	}
 
-	// var statfs unix.S_IFMT
-	// // See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
-	// err = unix.Statfs(volumePath, &statfs)
-	// if err != nil {
-	// 	return volumeStatistics{}, err
-	// }
+	var statfs unix.S_IFMT
+	// See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
+	err = unix.Statfs(volumePath, &statfs)
+	if err != nil {
+		return volumeStatistics{}, err
+	}
 
 	volStats := volumeStatistics{
-		// availableBytes: int64(statfs.Bavail) * int64(statfs.Bsize),
-		// totalBytes:     int64(statfs.Blocks) * int64(statfs.Bsize),
-		// usedBytes:      (int64(statfs.Blocks) - int64(statfs.Bfree)) * int64(statfs.Bsize),
+		availableBytes: int64(statfs.Bavail) * int64(statfs.Bsize),
+		totalBytes:     int64(statfs.Blocks) * int64(statfs.Bsize),
+		usedBytes:      (int64(statfs.Blocks) - int64(statfs.Bfree)) * int64(statfs.Bsize),
 
-		// availableInodes: int64(statfs.Ffree),
-		// totalInodes:     int64(statfs.Files),
-		// usedInodes:      int64(statfs.Files) - int64(statfs.Ffree),
+		availableInodes: int64(statfs.Ffree),
+		totalInodes:     int64(statfs.Files),
+		usedInodes:      int64(statfs.Files) - int64(statfs.Ffree),
 	}
 
 	return volStats, nil
 }
 
 func (m *mounter) IsBlockDevice(devicePath string) (bool, error) {
-	// var stat unix.Stat_t
-	// err := unix.Stat(devicePath, &stat)
-	// if err != nil {
-	// 	return false, err
-	// }
+	var stat unix.Stat_t
+	err := unix.Stat(devicePath, &stat)
+	if err != nil {
+		return false, err
+	}
 
-	// return (stat.Mode & unix.S_IFMT) == unix.S_IFBLK, nil
+	return (stat.Mode & unix.S_IFMT) == unix.S_IFBLK, nil
 
 	return true, nil
 }

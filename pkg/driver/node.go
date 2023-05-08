@@ -2,7 +2,9 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -33,6 +35,18 @@ var (
 	}
 )
 
+
+type BlockDevice struct {
+	Name       string `json:"name"`
+	UUID       string `json:"uuid"`
+	MountPoint string `json:"mountpoint"`
+	Serial     string `json:"serial"`
+}
+
+type LsblkOutput struct {
+	BlockDevices []BlockDevice `json:"blockdevices"`
+}
+
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	klog.V(4).InfoS("NodeStageVolume: called", "args", *req)
 
@@ -60,7 +74,11 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return &csi.NodeStageVolumeResponse{}, nil
 	}
 
-	source := req.PublishContext[DevicePathKey]
+	source, err := d.findDevicePath(ctx, volumeID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to find device path for volume %s. %v", volumeID, err)
+	}
+
 
 	mnt := req.VolumeCapability.GetMount()
 	options := mnt.MountFlags
@@ -77,23 +95,23 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	} else {
 		klog.Info("skipping formatting the source device in node stage volume")
 
-		// if err := d.mounter.IsAttached(source); err != nil {
-		// 	return nil, fmt.Errorf("error retrieving the attachement status %q: %s", source, err)
-		// }
+		if err := d.mounter.IsAttached(source); err != nil {
+			return nil, fmt.Errorf("error retrieving the attachement status %q: %s", source, err)
+		}
 
-		// formatted, err := d.mounter.IsFormatted(source)
-		// if err != nil {
-		// 	return nil, err
-		// }
+		formatted, err := d.mounter.IsFormatted(source)
+		if err != nil {
+			return nil, err
+		}
 
-		// if !formatted {
-		// 	klog.Info("formatting the volume for staging")
-		// 	if err := d.mounter.Format(source, fsType); err != nil {
-		// 		return nil, status.Error(codes.Internal, err.Error())
-		// 	}
-		// } else {
-		// 	klog.Info("source device is already formatted")
-		// }
+		if !formatted {
+			klog.Info("formatting the volume for staging")
+			if err := d.mounter.Format(source, fsType); err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		} else {
+			klog.Info("source device is already formatted")
+		}
 	}
 
 	klog.Info("mounting the volume for staging")
@@ -434,7 +452,9 @@ func (d *Driver) nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, mo
 		return status.Error(codes.InvalidArgument, fmt.Sprintf("Could not find the volume name from the publish context %q", d.publishInfoVolumeName))
 	}
 
-	source, err := findAbsoluteDeviceByIDPath(volumeName)
+	volumeId := req.GetVolumeId()
+
+	source, err := d.findDevicePath(context.Background(), volumeId)
 	if err != nil {
 		return status.Errorf(codes.Internal, "Failed to find device path for volume %s. %v", volumeName, err)
 	}
@@ -473,4 +493,44 @@ func findAbsoluteDeviceByIDPath(volumeID string) (string, error) {
 	}
 
 	return resolved, nil
+}
+
+func (d *Driver) findDevicePath(ctx context.Context ,volumeID string) (string, error) {
+	volume, err := d.getStorage(ctx, volumeID)
+	if err != nil {
+		return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
+	}
+
+	// drive- + volume.BusDevice+volume.BusNumber
+	serial := fmt.Sprintf("drive-%s%s", volume.BusDevice, volume.BusNumber)
+
+	output , err := ListBlockDevices()
+	if err != nil {
+		return "", err
+	}
+
+	for _, device := range output.BlockDevices {
+		if device.Serial == serial {
+			return "/dev/" + device.Name, nil
+		}
+	}
+
+	return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
+}
+
+func ListBlockDevices() (*LsblkOutput , error) {
+	// Use 'lsblk' command to list block devices
+	cmd := exec.Command("lsblk", "-Jo", "name,uuid,mountpoint,serial", "-n", "-d")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal output into Go struct
+	var output LsblkOutput
+	if err := json.Unmarshal(out, &output); err != nil {
+		return nil, err
+	}
+	
+	return &output, nil
 }

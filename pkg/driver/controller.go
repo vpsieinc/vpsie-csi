@@ -1,13 +1,10 @@
 package driver
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -106,7 +103,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Size:         int(size / giB),
 		Description:  createdByVpsie,
 		StorageType:  "SATA",
-		IsAutomatic:  1,
+		IsAutomatic:  0,
 	}
 	// if d.config.StorageTag != "" {
 	// 	createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
@@ -197,10 +194,6 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
 	}
 
-	before, err := ListBlockDevices()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list block devices before attaching storage: %v", err)
-	}
 
 	// attach the volume to the correct node
 	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
@@ -209,30 +202,11 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
 	}
 
-	time.Sleep(5 * time.Second)
-
-	after, err := ListBlockDevices()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list block devices after attaching storage: %v", err)
-	}
-
-	var device string
-	for _, dev := range after {
-		if !contains(before, dev) {
-			device = dev
-			break
-		}
-	}
-
-	if device == "" {
-		return nil, fmt.Errorf("failed to identify newly attached device")
-	}
 
 	klog.Info("volume was attached")
 	return &csi.ControllerPublishVolumeResponse{
 		PublishContext: map[string]string{
 			d.publishInfoVolumeName: req.VolumeId,
-			DevicePathKey:           device,
 		},
 	}, nil
 }
@@ -576,24 +550,6 @@ func validateCapabilities(caps []*csi.VolumeCapability) []string {
 	return violations.List()
 }
 
-func ListBlockDevices() ([]string, error) {
-	var devices []string
-
-	// Use 'lsblk' command to list block devices
-	cmd := exec.Command("lsblk", "-o", "NAME", "-n", "-d")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to list block devices: %v", err)
-	}
-
-	// Extract device names from output
-	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-		devices = append(devices, strings.TrimSpace(line))
-	}
-
-	return devices, nil
-}
 
 func contains(slice []string, target string) bool {
 	for _, value := range slice {
