@@ -35,7 +35,6 @@ var (
 	}
 )
 
-
 type BlockDevice struct {
 	Name       string `json:"name"`
 	UUID       string `json:"uuid"`
@@ -78,7 +77,6 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to find device path for volume %s. %v", volumeID, err)
 	}
-
 
 	mnt := req.VolumeCapability.GetMount()
 	options := mnt.MountFlags
@@ -495,7 +493,7 @@ func findAbsoluteDeviceByIDPath(volumeID string) (string, error) {
 	return resolved, nil
 }
 
-func (d *Driver) findDevicePath(ctx context.Context ,volumeID string) (string, error) {
+func (d *Driver) findDevicePath(ctx context.Context, volumeID string) (string, error) {
 	volume, err := d.getStorage(ctx, volumeID)
 	if err != nil {
 		return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
@@ -504,7 +502,7 @@ func (d *Driver) findDevicePath(ctx context.Context ,volumeID string) (string, e
 	// drive- + volume.BusDevice+volume.BusNumber
 	serial := fmt.Sprintf("drive-%s%s", volume.BusDevice, volume.BusNumber)
 
-	output , err := ListBlockDevices()
+	output, err := ListBlockDevices()
 	if err != nil {
 		return "", err
 	}
@@ -518,7 +516,7 @@ func (d *Driver) findDevicePath(ctx context.Context ,volumeID string) (string, e
 	return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 }
 
-func ListBlockDevices() (*LsblkOutput , error) {
+func ListBlockDevices() (*LsblkOutput, error) {
 	// Use 'lsblk' command to list block devices
 	cmd := exec.Command("lsblk", "-Jo", "name,uuid,mountpoint,serial", "-n", "-d")
 	out, err := cmd.Output()
@@ -531,6 +529,6 @@ func ListBlockDevices() (*LsblkOutput , error) {
 	if err := json.Unmarshal(out, &output); err != nil {
 		return nil, err
 	}
-	
+
 	return &output, nil
 }

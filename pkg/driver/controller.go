@@ -194,14 +194,12 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
 	}
 
-
 	// attach the volume to the correct node
 	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
 	if err != nil {
 		klog.Errorf("failed to attach volume: %v", err)
 		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
 	}
-
 
 	klog.Info("volume was attached")
 	return &csi.ControllerPublishVolumeResponse{
@@ -549,7 +547,6 @@ func validateCapabilities(caps []*csi.VolumeCapability) []string {
 
 	return violations.List()
 }
-
 
 func contains(slice []string, target string) bool {
 	for _, value := range slice {

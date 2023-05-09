@@ -32,7 +32,7 @@ type Client struct {
 	Account  AccountService
 	Storage  StorageService
 	Snapshot SnapshotService
-	Vpsie VpsieService
+	Vpsie    VpsieService
 }
 
 type ErrorRsp struct {

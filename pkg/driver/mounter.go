@@ -185,8 +185,6 @@ func (m *mounter) IsAttached(source string) error {
 		return fmt.Errorf("error device name is empty for path %s", out)
 	}
 
-
-
 	return nil
 }
 
@@ -309,7 +307,7 @@ func (m *mounter) GetStatistics(volumePath string) (volumeStatistics, error) {
 		}, nil
 	}
 
-	var statfs unix.S_IFMT
+	var statfs unix.Statfs_t
 	// See http://man7.org/linux/man-pages/man2/statfs.2.html for details.
 	err = unix.Statfs(volumePath, &statfs)
 	if err != nil {
@@ -338,5 +336,4 @@ func (m *mounter) IsBlockDevice(devicePath string) (bool, error) {
 
 	return (stat.Mode & unix.S_IFMT) == unix.S_IFBLK, nil
 
-	return true, nil
 }

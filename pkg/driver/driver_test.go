@@ -15,6 +15,7 @@ import (
 )
 
 const numVpsies = 100
+
 func TestSanity(t *testing.T) {
 	socket := "/tmp/csi.sock"
 	endpoint := "unix://" + socket
@@ -30,27 +31,26 @@ func TestSanity(t *testing.T) {
 	vpsies := make(map[string]*govpsie.VmData, numVpsies)
 	nodeID := uuid.New().String()
 	vpsies[nodeID] = &govpsie.VmData{
-		Identifier: nodeID ,
-		ID: 	   0,
+		Identifier: nodeID,
+		ID:         0,
 	}
-	
+
 	for i := 1; i < numVpsies; i++ {
 		var identifier = uuid.New().String()
 		vpsies[identifier] = &govpsie.VmData{
-			Identifier: identifier ,
-			ID: 	   i,
+			Identifier: identifier,
+			ID:         i,
 		}
 	}
 
-
 	driver := &Driver{
 		config: Config{
-			EndPoint: endpoint,
-			DriverName: "fake",
-			NodeID: nodeID,
-			DataCenter: "nyc",
-			StorageTag: "",
-			ClientID: "",
+			EndPoint:     endpoint,
+			DriverName:   "fake",
+			NodeID:       nodeID,
+			DataCenter:   "nyc",
+			StorageTag:   "",
+			ClientID:     "",
 			ClientSecret: "",
 		},
 		mounter: &fm,
@@ -70,7 +70,6 @@ func TestSanity(t *testing.T) {
 		return driver.Run(ctx)
 	})
 
-	
 	config := sanity.NewTestConfig()
 	if err := os.RemoveAll(config.TargetPath); err != nil {
 		t.Fatalf("failed to delete target path %s: %s", config.TargetPath, err)
@@ -78,7 +77,7 @@ func TestSanity(t *testing.T) {
 	if err := os.RemoveAll(config.StagingPath); err != nil {
 		t.Fatalf("failed to delete staging path %s: %s", config.StagingPath, err)
 	}
-	
+
 	config.IDGen = &idGenerator{}
 	config.IdempotentCount = 5
 	config.CheckPath = fm.checkMountPath
@@ -91,9 +90,8 @@ func TestSanity(t *testing.T) {
 	if err := eg.Wait(); err != nil {
 		t.Errorf("driver run failed: %s", err)
 	}
-	
-}
 
+}
 
 func createDir(targetPath string) (string, error) {
 	if err := os.MkdirAll(targetPath, 0300); err != nil {
@@ -121,7 +119,7 @@ func (f *fakeMounter) Unmount(target string) error {
 	delete(f.mounted, target)
 	return nil
 }
- 
+
 func (f *fakeMounter) GetDeviceName(_ mount.Interface, mountPath string) (string, error) {
 	if _, ok := f.mounted[mountPath]; ok {
 		return "/mnt", nil
@@ -191,7 +189,7 @@ type mockStorage struct {
 	storages map[string]*govpsie.Storage
 }
 
-func(m *mockStorage) List(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.Storage, error) {
+func (m *mockStorage) List(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.Storage, error) {
 	var storages []govpsie.Storage
 
 	for _, vol := range m.storages {
@@ -201,22 +199,22 @@ func(m *mockStorage) List(ctx context.Context, options *govpsie.ListOptions) ([]
 	return storages, nil
 }
 
-func(m *mockStorage) Delete(ctx context.Context, storageIdentifier string) error {
+func (m *mockStorage) Delete(ctx context.Context, storageIdentifier string) error {
 	delete(m.storages, storageIdentifier)
 	return nil
 }
-func(m *mockStorage) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
+func (m *mockStorage) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
-func(m *mockStorage) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
+func (m *mockStorage) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
-func(m *mockStorage) CreateContainer(ctx context.Context, dcIdentifier string) error {
+func (m *mockStorage) CreateContainer(ctx context.Context, dcIdentifier string) error {
 	return nil
 }
-func(m *mockStorage) ListAll(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.Storage, error) {
+func (m *mockStorage) ListAll(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.Storage, error) {
 	var storages []govpsie.Storage
 
 	for _, vol := range m.storages {
@@ -225,23 +223,23 @@ func(m *mockStorage) ListAll(ctx context.Context, options *govpsie.ListOptions) 
 
 	return storages, nil
 }
-func(m *mockStorage) Update(ctx context.Context, updateReq *govpsie.StorageUpdateRequest) error {
+func (m *mockStorage) Update(ctx context.Context, updateReq *govpsie.StorageUpdateRequest) error {
 	volume := m.storages[updateReq.StorageIdentifier]
 	volume.Size = updateReq.Size
 	return nil
 }
-func(m *mockStorage) Create(ctx context.Context, createReq *govpsie.StorageCreateRequest, vmIdentifier string) error {
+func (m *mockStorage) Create(ctx context.Context, createReq *govpsie.StorageCreateRequest, vmIdentifier string) error {
 	return nil
-} 
-func(m *mockStorage) CreateStorage(ctx context.Context, createReq *govpsie.StorageCreateRequest) error {
+}
+func (m *mockStorage) CreateStorage(ctx context.Context, createReq *govpsie.StorageCreateRequest) error {
 	id := randString(12)
 	vol := &govpsie.Storage{
-		Identifier: id,
-		Name: createReq.Name,
+		Identifier:   id,
+		Name:         createReq.Name,
 		DcIdentifier: createReq.DcIdentifier,
-		Size: createReq.Size,
-		DiskFormat: createReq.DiskFormat,
-		StorageType: createReq.StorageType,
+		Size:         createReq.Size,
+		DiskFormat:   createReq.DiskFormat,
+		StorageType:  createReq.StorageType,
 	}
 
 	m.storages[id] = vol
@@ -262,11 +260,11 @@ func (m *mockVpsie) List(ctx context.Context, options *govpsie.ListOptions) ([]g
 	return vpsies, nil
 }
 
-func(m *mockVpsie) ListVpsie(context.Context, *govpsie.ListOptions, string) ([]govpsie.VmData, error) {
+func (m *mockVpsie) ListVpsie(context.Context, *govpsie.ListOptions, string) ([]govpsie.VmData, error) {
 	return nil, nil
 }
-func(m *mockVpsie)  GetVpsieByIdentifier(ctx context.Context, vcIdentifier string) (*govpsie.VmData, error) {
-	vpsie, ok :=  m.vpsies[vcIdentifier]
+func (m *mockVpsie) GetVpsieByIdentifier(ctx context.Context, vcIdentifier string) (*govpsie.VmData, error) {
+	vpsie, ok := m.vpsies[vcIdentifier]
 	if !ok {
 		return nil, errors.New("vpsie not found")
 	}
@@ -274,64 +272,63 @@ func(m *mockVpsie)  GetVpsieByIdentifier(ctx context.Context, vcIdentifier strin
 	return vpsie, nil
 }
 
-func(m *mockVpsie)  GetVpsieStatusByIdentifier(context.Context, string) (*govpsie.Status, error) {
+func (m *mockVpsie) GetVpsieStatusByIdentifier(context.Context, string) (*govpsie.Status, error) {
 	return nil, nil
 }
-func(m *mockVpsie)  GetVpsieConsole(ctx context.Context, identifierId string) (*govpsie.VpsieConsole, error) {
+func (m *mockVpsie) GetVpsieConsole(ctx context.Context, identifierId string) (*govpsie.VpsieConsole, error) {
 	return nil, nil
 }
-func(m *mockVpsie)  CreateVpsie(context.Context, *govpsie.CreateVpsieRequest) error {
+func (m *mockVpsie) CreateVpsie(context.Context, *govpsie.CreateVpsieRequest) error {
 	return nil
 }
-func(m *mockVpsie)  DeleteVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) DeleteVpsie(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie)  StartVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) StartVpsie(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie)  StopVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) StopVpsie(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie)  RestartVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) RestartVpsie(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie) ChangePassword(ctx context.Context, identifierId string, newPassword string) error {
+func (m *mockVpsie) ChangePassword(ctx context.Context, identifierId string, newPassword string) error {
 	return nil
 }
-func(m *mockVpsie) ChangeHostName(ctx context.Context, identifierId string, newHostname string) error {
+func (m *mockVpsie) ChangeHostName(ctx context.Context, identifierId string, newHostname string) error {
 	return nil
 }
-func(m *mockVpsie) AddVPC(ctx context.Context, request *govpsie.VpcRequest) error {
+func (m *mockVpsie) AddVPC(ctx context.Context, request *govpsie.VpcRequest) error {
 	return nil
 }
-func(m *mockVpsie)MoveVPC(ctx context.Context, request *govpsie.VpcRequest) error {
+func (m *mockVpsie) MoveVPC(ctx context.Context, request *govpsie.VpcRequest) error {
 	return nil
 }
-func(m *mockVpsie) AddTags(ctx context.Context, identifierId string, tags []string) error {
+func (m *mockVpsie) AddTags(ctx context.Context, identifierId string, tags []string) error {
 	return nil
 }
-func(m *mockVpsie) ResizeVpsie(ctx context.Context, identifierId, cpu, ram string) error {
+func (m *mockVpsie) ResizeVpsie(ctx context.Context, identifierId, cpu, ram string) error {
 	return nil
 }
-func(m *mockVpsie) AddSsh(ctx context.Context, identifierId, sshKeyIdentifier string) error {
+func (m *mockVpsie) AddSsh(ctx context.Context, identifierId, sshKeyIdentifier string) error {
 	return nil
 }
-func(m *mockVpsie) AddScript(ctx context.Context, identifierId, scriptIdentifier string) error {
+func (m *mockVpsie) AddScript(ctx context.Context, identifierId, scriptIdentifier string) error {
 	return nil
 }
-func(m *mockVpsie) ToggleLock(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) ToggleLock(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie) DoMultiActions(ctx context.Context, vmsIdentifiers []string, actionType, sshKeyIdentifier string) error {
+func (m *mockVpsie) DoMultiActions(ctx context.Context, vmsIdentifiers []string, actionType, sshKeyIdentifier string) error {
 	return nil
 }
-func(m *mockVpsie) EnableIpv6(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) EnableIpv6(ctx context.Context, identifierId string) error {
 	return nil
 }
-func(m *mockVpsie) AddFip(ctx context.Context, identifierId, dcIdentifier string) error {
+func (m *mockVpsie) AddFip(ctx context.Context, identifierId, dcIdentifier string) error {
 	return nil
 }
-
 
 func randString(n int) string {
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"

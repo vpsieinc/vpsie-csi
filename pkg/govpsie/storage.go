@@ -44,8 +44,8 @@ type Storage struct {
 	OsIdentifier   string `json:"osIdentifier"`
 	State          string `json:"state"`
 	DcIdentifier   string `json:"dcIdentifier"`
-	BusDevice string `json:"bus_device"`
-	BusNumber string `json:"bus_number"`
+	BusDevice      string `json:"bus_device"`
+	BusNumber      string `json:"bus_number"`
 }
 
 type ListStorageRoot struct {
@@ -62,13 +62,13 @@ type StorageUpdateRequest struct {
 }
 
 type StorageCreateRequest struct {
-	Name         string   `json:"name"`
-	DcIdentifier string   `json:"dcIdentifier"`
-	Description  string   `json:"description"`
-	Size         int      `json:"size"`
-	StorageType  string   `json:"storageType"`
-	DiskFormat   string   `json:"diskFormat"`
-	IsAutomatic  int      `json:"isAutomatic"`
+	Name         string `json:"name"`
+	DcIdentifier string `json:"dcIdentifier"`
+	Description  string `json:"description"`
+	Size         int    `json:"size"`
+	StorageType  string `json:"storageType"`
+	DiskFormat   string `json:"diskFormat"`
+	IsAutomatic  int    `json:"isAutomatic"`
 }
 
 func (s *storageServiceHandler) List(ctx context.Context, options *ListOptions) ([]Storage, error) {
@@ -210,7 +210,7 @@ func (s *storageServiceHandler) Create(ctx context.Context, createReq *StorageCr
 	return s.client.Do(ctx, req, nil)
 }
 
-func(s *storageServiceHandler) CreateStorage(ctx context.Context, createReq *StorageCreateRequest) error {
+func (s *storageServiceHandler) CreateStorage(ctx context.Context, createReq *StorageCreateRequest) error {
 	path := fmt.Sprintf("%s/storages/create/multiple", storageBasePath)
 	fullReq := struct {
 		Storages []StorageCreateRequest `json:"storages"`
