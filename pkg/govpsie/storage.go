@@ -45,7 +45,7 @@ type Storage struct {
 	State          string `json:"state"`
 	DcIdentifier   string `json:"dcIdentifier"`
 	BusDevice      string `json:"bus_device"`
-	BusNumber      string `json:"bus_number"`
+	BusNumber      int `json:"bus_number"`
 }
 
 type ListStorageRoot struct {

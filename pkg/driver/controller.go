@@ -517,6 +517,7 @@ func (d *Driver) getStorage(ctx context.Context, storageIdentifier string) (*gov
 		PerPage: 1000,
 	})
 	if err != nil {
+		klog.Errorf("failed to list volumes: %v", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -526,6 +527,7 @@ func (d *Driver) getStorage(ctx context.Context, storageIdentifier string) (*gov
 		}
 	}
 
+	klog.Errorf("volume %s not found", storageIdentifier)
 	return nil, fmt.Errorf("volume %s not found", storageIdentifier)
 }
 

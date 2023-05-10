@@ -496,11 +496,14 @@ func findAbsoluteDeviceByIDPath(volumeID string) (string, error) {
 func (d *Driver) findDevicePath(ctx context.Context, volumeID string) (string, error) {
 	volume, err := d.getStorage(ctx, volumeID)
 	if err != nil {
+		klog.Errorf("Failed to get volume %s. %v", volumeID, err)
 		return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 	}
 
 	// drive- + volume.BusDevice+volume.BusNumber
-	serial := fmt.Sprintf("drive-%s%s", volume.BusDevice, volume.BusNumber)
+	serial := fmt.Sprintf("drive-%s%d", volume.BusDevice, volume.BusNumber)
+
+	klog.Errorf("serial: %s", serial)
 
 	output, err := ListBlockDevices()
 	if err != nil {
@@ -512,6 +515,8 @@ func (d *Driver) findDevicePath(ctx context.Context, volumeID string) (string, e
 			return "/dev/" + device.Name, nil
 		}
 	}
+
+	klog.Infof("devices: %v", output.BlockDevices)
 
 	return "", status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 }
