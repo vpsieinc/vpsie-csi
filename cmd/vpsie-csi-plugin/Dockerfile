@@ -1,5 +1,15 @@
-FROM debian:11
+FROM amd64/alpine:3.16
 
-ADD vpsie-csi-plugin /usr/local/bin/
+RUN apk add --no-cache ca-certificates \
+                       e2fsprogs \
+                       findmnt \
+                       xfsprogs \
+                       xfsprogs-extra \
+                       util-linux \
+                       e2fsprogs-extra
 
-ENTRYPOINT ["/usr/local/bin/vpsie-csi-plugin"]
+ADD do-csi-plugin /bin/
+
+ENTRYPOINT ["/bin/do-csi-plugin"]
+
+ENTRYPOINT ["/bin/vpsie-csi-plugin"]
