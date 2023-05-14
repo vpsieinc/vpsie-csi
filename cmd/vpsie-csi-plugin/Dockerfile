@@ -1,15 +1,7 @@
-FROM alpine:3.12
+FROM debian:11
 
-RUN apk add --no-cache ca-certificates \
-                       blkid \
-                       e2fsprogs \
-                       e2fsprogs-extra \
-                       findmnt \
-                       parted \
-                       util-linux \
-                       xfsprogs \
-    && rm -rf /var/cache/apk/*
+RUN apt-get update && apt-get install -y ca-certificates
 
-ADD vpsie-csi-plugin /bin/
+ADD vpsie-csi-plugin /usr/local/bin/
 
-ENTRYPOINT ["/bin/vpsie-csi-plugin"]
+ENTRYPOINT ["/usr/local/bin/vpsie-csi-plugin"]
