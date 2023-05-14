@@ -154,17 +154,7 @@ spec:
     spec:
       priorityClassName: system-node-critical
       serviceAccount: vpsie-csi-node-sa
-      hostNetwork: true
-      initContainers:
-        - name: automount-udev-deleter
-          image: alpine:3.14
-          args:
-            - "rm"
-            - "-f"
-            - "/etc/udev/rules.d/99-digitalocean-automount.rules"
-          volumeMounts:
-            - name: udev-rules-dir
-              mountPath: /etc/udev/rules.d/          
+      hostNetwork: true         
       containers:
         - name: csi-node-driver-registrar
           image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
