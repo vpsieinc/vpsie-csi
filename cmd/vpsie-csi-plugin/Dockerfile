@@ -8,8 +8,7 @@ RUN apk add --no-cache ca-certificates \
                        util-linux \
                        e2fsprogs-extra
 
-ADD do-csi-plugin /bin/
+ADD vpsie-csi-plugin /bin/
 
-ENTRYPOINT ["/bin/do-csi-plugin"]
 
 ENTRYPOINT ["/bin/vpsie-csi-plugin"]
