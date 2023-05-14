@@ -221,14 +221,25 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
+          terminationMessagePath: /tmp/termination-log
+          terminationMessagePolicy: File
           volumeMounts:
             - name: plugin-dir
               mountPath: /csi
             - name: pods-mount-dir
               mountPath: /var/lib/kubelet
               mountPropagation: "Bidirectional"
-            - name: device-dir
+            - name: dev-dir
               mountPath: /dev
+            - name: udev-data
+              mountPath: /run/udev
+            - name: host-dir
+              mountPath: /host
+              mountPropagation: Bidirectional
+            - mountPath: /sys
+              name: sys-dir
+
+            
       volumes:
         - name: registration-dir
           hostPath:
@@ -242,13 +253,24 @@ spec:
           hostPath:
             path: /var/lib/kubelet
             type: Directory
-        - name: device-dir
-          hostPath:
-            path: /dev
         - name: udev-rules-dir
           hostPath:
             path: /etc/udev/rules.d/
-
+        - name: dev-dir
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: udev-data
+          hostPath:
+            path: /run/udev
+        - name: host-dir
+          hostPath:
+            path: /
+            type: Directory
+        - name: sys-dir
+          hostPath:
+            path: /sys
+            type: Directory
 ---
 apiVersion: v1
 kind: ServiceAccount

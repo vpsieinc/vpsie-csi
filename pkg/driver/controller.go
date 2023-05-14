@@ -102,7 +102,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		DiskFormat:   "EXT4",
 		Size:         int(size / giB),
 		Description:  createdByVpsie,
-		StorageType:  "SATA",
+		StorageType:  "LOCAL",
 		IsAutomatic:  0,
 	}
 	// if d.config.StorageTag != "" {
