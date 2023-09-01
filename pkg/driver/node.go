@@ -24,7 +24,7 @@ const (
 	maxVolumesPerNode = 7
 
 	diskIDPath = "/dev/disk/by-id"
-	diskPrefix = "scsi-0DO_Volume_"
+	diskPrefix = "scsi-vpsie_Volume_"
 )
 
 var (

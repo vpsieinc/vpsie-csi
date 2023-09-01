@@ -65,8 +65,22 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		return nil, status.Errorf(codes.OutOfRange, "invalid capacity range: %v", err)
 	}
 
-	volumeName := req.Name
+	var (
+		storageType string
+	)
 
+	for key, value := range req.GetParameters() {
+		switch strings.ToLower(key) {
+		case "type":
+			storageType = strings.ToUpper(value)
+			klog.Infof("storageType: %s", storageType)
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid parameter key %s for CreateVolume", key)
+		}
+	}
+
+	volumeName := req.Name
+	klog.Infof("Create Volume Param: type: %s", storageType)
 	klog.Infof("volume_name: %s, size: %d, method: %s, volume_capabilities: %s", volumeName, size, "create_volume", req.GetVolumeCapabilities)
 
 	klog.Info("create volume called")
@@ -102,7 +116,7 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		DiskFormat:   "EXT4",
 		Size:         int(size / giB),
 		Description:  createdByVpsie,
-		StorageType:  "LOCAL",
+		StorageType:  storageType,
 		IsAutomatic:  0,
 	}
 	// if d.config.StorageTag != "" {

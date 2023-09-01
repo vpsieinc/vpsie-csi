@@ -45,13 +45,12 @@ func TestSanity(t *testing.T) {
 
 	driver := &Driver{
 		config: Config{
-			EndPoint:     endpoint,
-			DriverName:   "fake",
-			NodeID:       nodeID,
-			DataCenter:   "nyc",
-			StorageTag:   "",
-			ClientID:     "",
-			ClientSecret: "",
+			EndPoint:   endpoint,
+			DriverName: "fake",
+			NodeID:     nodeID,
+			DataCenter: "nyc",
+			StorageTag: "",
+			Token:      "",
 		},
 		mounter: &fm,
 		storage: &mockStorage{

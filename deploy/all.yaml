@@ -11,10 +11,25 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: vpsie-block-storage
+  name: vpsie-fast-block-storage 
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  type: ssd
 provisioner: vpsie.csi.vpsie.com
 allowVolumeExpansion: true
 
+
+---
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: vpsie-slow-block-storage
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  type: sata
+provisioner: vpsie.csi.vpsie.com
+allowVolumeExpansion: true
 
 ---
 # write deployment for controller
@@ -22,7 +37,7 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: csi-vpsie-controller
-  namespace: default
+  namespace: kube-system
   labels:
     app.kubernetes.io/name: vpsie-csi-driver
 spec: 
@@ -83,8 +98,6 @@ spec:
           image: natnaeldocker/csi-vpsie:latest
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--clientID=$(CLIENTID)"
-            - "--clientSecret=$(CLIENTSECRET)"
             - "--url=$(URL)"
             - "--token=$(TOKEN)"
           env:
@@ -95,16 +108,6 @@ spec:
                   key: token
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
-            - name: CLIENTID
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: clientID
-            - name: CLIENTSECRET
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: clientSecret
             - name: URL
               valueFrom:
                 secretKeyRef:
@@ -131,7 +134,7 @@ kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: csi-vpsie-controller-sa
-  namespace: default
+  namespace: kube-system
 
 ---
 
@@ -139,7 +142,7 @@ kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: vpsie-csi-node
-  namespace: default
+  namespace: kube-system
 spec: 
   selector:
     matchLabels:
@@ -185,8 +188,6 @@ spec:
           image: natnaeldocker/csi-vpsie:latest
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--clientID=$(CLIENTID)"
-            - "--clientSecret=$(CLIENTSECRET)"
             - "--token=$(TOKEN)"
             - "--url=https://vpsie.com"
           env:
@@ -197,16 +198,6 @@ spec:
                 secretKeyRef:
                   name: vpsie-secret
                   key: token
-            - name: CLIENTID
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: clientID
-            - name: CLIENTSECRET
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: clientSecret
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
@@ -276,7 +267,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: vpsie-csi-node-sa
-  namespace: default
+  namespace: kube-system
   labels:
     api.kubernetes.io/name: vpsie-csi-driver
     
@@ -286,6 +277,7 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: csi-vpsie-provisioner-role
+  namespace: kube-system
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -320,7 +312,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-vpsie-controller-sa
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: csi-vpsie-provisioner-role
@@ -366,7 +358,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-vpsie-controller-sa
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: csi-vpsie-resizer-role
@@ -407,7 +399,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: csi-vpsie-controller-sa
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: csi-vpsie-attacher-role
@@ -420,7 +412,7 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: vpsie-csi-node-driver-registrar-role
-  namespace: default
+  namespace: kube-system
   labels:
     api.kubernetes.io/name: vpsie-csi-driver
 rules:
@@ -452,7 +444,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: vpsie-csi-node-sa
-    namespace: default
+    namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: vpsie-csi-node-driver-registrar-role

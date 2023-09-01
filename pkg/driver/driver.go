@@ -34,9 +34,6 @@ type Config struct {
 	DataCenter  string
 	Token       string
 	StorageTag  string
-
-	ClientID     string
-	ClientSecret string
 }
 
 type Driver struct {
@@ -69,18 +66,16 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		return nil, errors.New("end point is empty")
 	}
 
-	// tokenSource := oauth2.StaticTokenSource(&oauth2.Token{
-	// 	AccessToken: cfg.Token,
-	// })
+	ts := oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: cfg.Token,
+	})
 
-	// client := govpsie.NewClient(oauth2.NewClient(context.Background(), tokenSource))
-	ts := tknSource{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-	}
-	client := govpsie.NewClient(oauth2.NewClient(context.Background(), &ts))
+	client := govpsie.NewClient(oauth2.NewClient(context.Background(), ts))
 
 	client.SetUserAgent("vpsie-csi-driver/" + version)
+	client.SetRequestHeaders(map[string]string{
+		"Vpsie-Auth": cfg.Token,
+	})
 
 	hostName := os.Getenv("HOSTNAME")
 
