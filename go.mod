@@ -6,6 +6,7 @@ require (
 	github.com/container-storage-interface/spec v1.8.0-rc1
 	github.com/google/uuid v1.3.0
 	github.com/kubernetes-csi/csi-test/v4 v4.4.0
+	github.com/vpsie/govpsie v0.0.0-20230918141751-0e34bad94fb8
 	golang.org/x/oauth2 v0.3.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.6.0

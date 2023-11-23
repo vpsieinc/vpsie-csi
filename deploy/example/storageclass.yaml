@@ -1,6 +1,6 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: vpsie-block-storage
+  name: vpsie-fast-block-storage
 provisioner: vpsie.csi.vpsie.com
 allowVolumeExpansion: true

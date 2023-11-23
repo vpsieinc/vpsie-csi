@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"github.com/google/uuid"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
+	"github.com/vpsie/govpsie"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/mount-utils"
 )
@@ -202,11 +202,11 @@ func (m *mockStorage) Delete(ctx context.Context, storageIdentifier string) erro
 	delete(m.storages, storageIdentifier)
 	return nil
 }
-func (m *mockStorage) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
+func (m *mockStorage) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
-func (m *mockStorage) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string) error {
+func (m *mockStorage) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
@@ -227,10 +227,30 @@ func (m *mockStorage) Update(ctx context.Context, updateReq *govpsie.StorageUpda
 	volume.Size = updateReq.Size
 	return nil
 }
-func (m *mockStorage) Create(ctx context.Context, createReq *govpsie.StorageCreateRequest, vmIdentifier string) error {
+func (m *mockStorage) Create(ctx context.Context, createReq *govpsie.StorageCreateRequest, vmIdentifier string, vmType string) error {
 	return nil
 }
+
+func (m *mockStorage) ListVmsToAttach(ctx context.Context) ([]govpsie.VmToAttach, error) {
+	return nil, nil
+}
+
 func (m *mockStorage) CreateStorage(ctx context.Context, createReq *govpsie.StorageCreateRequest) error {
+	id := randString(12)
+	vol := &govpsie.Storage{
+		Identifier:   id,
+		Name:         createReq.Name,
+		DcIdentifier: createReq.DcIdentifier,
+		Size:         createReq.Size,
+		DiskFormat:   createReq.DiskFormat,
+		StorageType:  createReq.StorageType,
+	}
+
+	m.storages[id] = vol
+	return nil
+}
+
+func (m *mockStorage) CreateVolume(ctx context.Context, createReq *govpsie.StorageCreateRequest) error {
 	id := randString(12)
 	vol := &govpsie.Storage{
 		Identifier:   id,

@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 
-	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"code.k9.ms/vpsie-csi/util"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/vpsie/govpsie"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -79,35 +80,35 @@ func NewDriver(cfg *Config) (*Driver, error) {
 
 	hostName := os.Getenv("HOSTNAME")
 
-	vpsie := client.Vpsie
 	// list all vpsies and search for specific one by name hostName
-	vpsies, err := vpsie.List(context.Background(), nil)
+	vms, err := client.Storage.ListVmsToAttach(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	var curentVpsie *govpsie.VmData
-	for _, vpsie := range vpsies {
-		if vpsie.Hostname == hostName {
-			curentVpsie = &vpsie
+	var curentVm *govpsie.VmToAttach
+	for _, vm := range vms {
+		if strings.ToLower(vm.Hostname) == hostName {
+			curentVm = &vm
 			break
 		}
 	}
 
-	if curentVpsie == nil || curentVpsie.Hostname == "" {
+	if curentVm == nil || curentVm.Hostname == "" {
 		return nil, fmt.Errorf("vpsie with name %s not found", hostName)
 	}
 
-	cfg.NodeID = curentVpsie.Identifier
-	cfg.DataCenter = curentVpsie.DcIdentifier
+	cfg.NodeID = curentVm.Identifier
+	cfg.DataCenter = curentVm.DcIdentifier
 
 	klog.Info("datacenter: ", cfg.DataCenter)
+	klog.Info("nodeID: ", cfg.NodeID)
 
 	return &Driver{
 		config:                *cfg,
 		storage:               client.Storage,
 		account:               client.Account,
 		snapshots:             client.Snapshot,
-		vpsie:                 vpsie,
+		vpsie:                 client.Vpsie,
 		publishInfoVolumeName: cfg.DriverName + "/volume-name",
 		mounter:               newMounter(),
 	}, nil

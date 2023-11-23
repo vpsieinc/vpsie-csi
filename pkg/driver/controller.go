@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"code.k9.ms/vpsie-csi/pkg/govpsie"
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/vpsie/govpsie"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -124,25 +124,32 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 	// }
 
 	klog.Infof("volume_req: %s\n , creating volume", createStorageRequest)
-	err = d.storage.CreateStorage(ctx, createStorageRequest)
+	err = d.storage.CreateVolume(ctx, createStorageRequest)
 	if err != nil {
+		klog.Errorf("Error creating volume: %v", err)
+
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	vol := govpsie.Storage{}
+	var vol *govpsie.Storage
 	storages, err := d.storage.List(ctx, &govpsie.ListOptions{
 		Page:    0,
 		PerPage: 1000,
 	})
+
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	for _, storage := range storages {
 		if storage.Name == volumeName {
-			vol = storage
+			vol = &storage
 			break
 		}
+	}
+
+	if vol == nil {
+		return nil, status.Error(codes.NotFound, "volume not Created")
 	}
 
 	resp := &csi.CreateVolumeResponse{
@@ -198,18 +205,47 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 
 	klog.Infof("controller publish volume called, volume_id: %v, node_id: %v", req.VolumeId, req.NodeId)
 
-	_, err := d.getStorage(ctx, req.VolumeId)
+	storage, err := d.getStorage(ctx, req.VolumeId)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Volume do not exist")
 	}
 
-	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	if storage.VmIdentifier != "" {
+		if storage.VmIdentifier == req.NodeId {
+			return &csi.ControllerPublishVolumeResponse{
+				PublishContext: map[string]string{
+					d.publishInfoVolumeName: req.VolumeId,
+				},
+			}, nil
+		} else {
+			return nil, status.Error(codes.AlreadyExists, "ControllerPublishVolume Volume is already attached to another node")
+		}
+	}
+
+	// _, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	// if err != nil {
+	// 	return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
+	// }
+
+	vms, err := d.storage.ListVmsToAttach(context.Background())
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "ControllerPublishVolume Node do not exist")
+		return nil, err
+	}
+
+	if vms == nil || len(vms) < 1 {
+		return nil, status.Error(codes.NotFound, "No VM to attach")
+	}
+
+	var vm *govpsie.VmToAttach
+
+	for _, vmToAttach := range vms {
+		if vmToAttach.Identifier == req.NodeId {
+			vm = &vmToAttach
+		}
 	}
 
 	// attach the volume to the correct node
-	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId)
+	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId, vm.Type)
 	if err != nil {
 		klog.Errorf("failed to attach volume: %v", err)
 		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
@@ -241,12 +277,29 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	_, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	// _, err = d.vpsie.GetVpsieByIdentifier(ctx, req.NodeId)
+	// if err != nil {
+	// 	return &csi.ControllerUnpublishVolumeResponse{}, nil
+	// }
+
+	vms, err := d.storage.ListVmsToAttach(context.Background())
 	if err != nil {
-		return &csi.ControllerUnpublishVolumeResponse{}, nil
+		return nil, err
 	}
 
-	if err := d.storage.DetachToVPSie(ctx, volumeID, nodeID); err != nil {
+	if vms == nil || len(vms) < 1 {
+		return nil, status.Error(codes.NotFound, "No VM to attach")
+	}
+
+	var vm *govpsie.VmToAttach
+
+	for _, vmToAttach := range vms {
+		if vmToAttach.Identifier == nodeID {
+			vm = &vmToAttach
+		}
+	}
+
+	if err := d.storage.DetachToVPSie(ctx, volumeID, nodeID, vm.Type); err != nil {
 		return nil, err
 	}
 
