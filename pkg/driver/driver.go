@@ -74,6 +74,11 @@ func NewDriver(cfg *Config) (*Driver, error) {
 	client := govpsie.NewClient(oauth2.NewClient(context.Background(), ts))
 
 	client.SetUserAgent("vpsie-csi-driver/" + version)
+
+	if cfg.Url != "" {
+		client.SetBaseURL(cfg.Url)
+	}
+
 	client.SetRequestHeaders(map[string]string{
 		"Vpsie-Auth": cfg.Token,
 	})
