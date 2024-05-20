@@ -2,9 +2,11 @@ package driver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -12,7 +14,6 @@ import (
 	"code.k9.ms/vpsie-csi/util"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/vpsie/govpsie"
-	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"k8s.io/klog/v2"
@@ -35,6 +36,7 @@ type Config struct {
 	DataCenter  string
 	Token       string
 	StorageTag  string
+	MaxRetries  int
 }
 
 type Driver struct {
@@ -47,7 +49,7 @@ type Driver struct {
 
 	storage   govpsie.StorageService
 	account   govpsie.AccountService
-	vpsie     govpsie.VpsieService
+	vpsie     govpsie.ServerService
 	snapshots govpsie.SnapshotService
 
 	readyMu sync.Mutex // protects ready
@@ -55,41 +57,68 @@ type Driver struct {
 }
 
 func NewDriver(cfg *Config) (*Driver, error) {
+	klog.Infof("Driver: %v version: %v", cfg.DriverName, version)
 	printNodeInfo()
 
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name is empty")
 	}
+	klog.Infof("Driver name: %v", cfg.DriverName)
 	if cfg.Token == "" {
 		return nil, errors.New("token is empty")
 	}
+	klog.Info("Token is not empty")
 	if cfg.EndPoint == "" {
 		return nil, errors.New("end point is empty")
 	}
+	klog.Infof("End point: %v", cfg.EndPoint)
 
-	ts := oauth2.StaticTokenSource(&oauth2.Token{
-		AccessToken: cfg.Token,
+	// ts := oauth2.StaticTokenSource(&oauth2.Token{
+	// 	AccessToken: cfg.Token,
+	// })
+
+	klog.Info("Token source created: ", cfg.Token)
+
+	// client := govpsie.NewClient(oauth2.NewClient(context.Background(), ts))
+	// disable ssl verification
+	client := govpsie.NewClient(&http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	})
 
-	client := govpsie.NewClient(oauth2.NewClient(context.Background(), ts))
+	klog.Info("Client created")
 
 	client.SetUserAgent("vpsie-csi-driver/" + version)
 
+	klog.Info("User agent set")
+
 	if cfg.Url != "" {
+		klog.Infof("Base url: %v", cfg.Url)
 		client.SetBaseURL(cfg.Url)
 	}
+
+	klog.Info("Base url set")
 
 	client.SetRequestHeaders(map[string]string{
 		"Vpsie-Auth": cfg.Token,
 	})
 
+	klog.Info("Request headers set")
+
 	hostName := os.Getenv("HOSTNAME")
 
 	// list all vpsies and search for specific one by name hostName
 	vms, err := client.Storage.ListVmsToAttach(context.Background())
+
+	klog.Info("List vms to attach")
 	if err != nil {
+		klog.Error("Failed to list vms to attach: %v", err)
 		return nil, err
 	}
+
+	klog.Info("Listed vms to attach %v", vms)
+
 	var curentVm *govpsie.VmToAttach
 	for _, vm := range vms {
 		if strings.ToLower(vm.Hostname) == hostName {
@@ -97,6 +126,8 @@ func NewDriver(cfg *Config) (*Driver, error) {
 			break
 		}
 	}
+
+	klog.Info("Curent vm: ", curentVm)
 
 	if curentVm == nil || curentVm.Hostname == "" {
 		return nil, fmt.Errorf("vpsie with name %s not found", hostName)
@@ -113,7 +144,7 @@ func NewDriver(cfg *Config) (*Driver, error) {
 		storage:               client.Storage,
 		account:               client.Account,
 		snapshots:             client.Snapshot,
-		vpsie:                 client.Vpsie,
+		vpsie:                 client.Server,
 		publishInfoVolumeName: cfg.DriverName + "/volume-name",
 		mounter:               newMounter(),
 	}, nil

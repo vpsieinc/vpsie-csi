@@ -1,17 +1,18 @@
 module code.k9.ms/vpsie-csi
 
-go 1.19
+go 1.21.4
 
 require (
 	github.com/container-storage-interface/spec v1.8.0-rc1
 	github.com/google/uuid v1.3.0
 	github.com/kubernetes-csi/csi-test/v4 v4.4.0
-	github.com/vpsie/govpsie v0.0.0-20230918141751-0e34bad94fb8
-	golang.org/x/oauth2 v0.3.0
+	github.com/robfig/cron v1.2.0
+	github.com/vpsie/govpsie v0.0.0-20240503105915-8283c7f76e92
+	golang.org/x/oauth2 v0.15.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.6.0
+	golang.org/x/sys v0.15.0
 	google.golang.org/grpc v1.53.0-dev
-	google.golang.org/protobuf v1.28.1
+	google.golang.org/protobuf v1.31.0
 	k8s.io/apimachinery v0.27.1
 	k8s.io/klog/v2 v2.90.1
 	k8s.io/mount-utils v0.26.3
@@ -28,8 +29,8 @@ require (
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.27.4 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
-	golang.org/x/net v0.8.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/net v0.19.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

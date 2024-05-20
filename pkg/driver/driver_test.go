@@ -39,7 +39,7 @@ func TestSanity(t *testing.T) {
 		var identifier = uuid.New().String()
 		vpsies[identifier] = &govpsie.VmData{
 			Identifier: identifier,
-			ID:         i,
+			ID:         int64(i),
 		}
 	}
 
@@ -202,11 +202,11 @@ func (m *mockStorage) Delete(ctx context.Context, storageIdentifier string) erro
 	delete(m.storages, storageIdentifier)
 	return nil
 }
-func (m *mockStorage) AttachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
+func (m *mockStorage) AttachToServer(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
-func (m *mockStorage) DetachToVPSie(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
+func (m *mockStorage) DetachToServer(ctx context.Context, storageIdentifier, vmIdentifier string, vmType string) error {
 	m.storages[storageIdentifier].VmIdentifier = vmIdentifier
 	return nil
 }
@@ -265,6 +265,50 @@ func (m *mockStorage) CreateVolume(ctx context.Context, createReq *govpsie.Stora
 	return nil
 }
 
+func (m *mockStorage) DetachAllFromServer(ctx context.Context, vmIdentifier string, vmType string) error {
+	return nil
+}
+func (m *mockStorage) UpdateSize(ctx context.Context, storageIdentifier, size string) error {
+	return nil
+}
+func (m *mockStorage) UpdateName(ctx context.Context, storageIdentifier, name string) error {
+	return nil
+}
+func (m *mockStorage) CreateSnapshot(ctx context.Context, storageIdentifier, name, storageType string) error {
+	return nil
+}
+func (m *mockStorage) ListSnapshots(ctx context.Context, options *govpsie.ListOptions) ([]govpsie.StorageSnapShot, error) {
+	return nil, nil
+}
+func (m *mockStorage) UpdateSnapshotName(ctx context.Context, snapshotIdentifier, name string) error {
+
+	return nil
+}
+func (m *mockStorage) RollbackSnapshot(ctx context.Context, snapshotIdentifier, snapType string) error {
+
+	return nil
+}
+func (m *mockStorage) CloneSnapshot(ctx context.Context, snapshotIdentifier, snapType string) error {
+
+	return nil
+}
+func (m *mockStorage) DeleteSnapshot(ctx context.Context, snapshotIdentifier string) error {
+
+	return nil
+}
+func (m *mockStorage) DeleteAllSnapshots(ctx context.Context, storageIdentifier string) error {
+
+	return nil
+}
+func (m *mockStorage) Get(ctx context.Context, identifier string) (*govpsie.StorageDetail, error) {
+
+	return nil, nil
+}
+
+func (m *mockStorage) ListStorageDataCenter(ctx context.Context) ([]govpsie.DataCenter, error) {
+	return nil, nil
+}
+
 type mockVpsie struct {
 	vpsies map[string]*govpsie.VmData
 }
@@ -279,7 +323,7 @@ func (m *mockVpsie) List(ctx context.Context, options *govpsie.ListOptions) ([]g
 	return vpsies, nil
 }
 
-func (m *mockVpsie) ListVpsie(context.Context, *govpsie.ListOptions, string) ([]govpsie.VmData, error) {
+func (m *mockVpsie) ListServer(context.Context, *govpsie.ListOptions, string) ([]govpsie.VmData, error) {
 	return nil, nil
 }
 func (m *mockVpsie) GetVpsieByIdentifier(ctx context.Context, vcIdentifier string) (*govpsie.VmData, error) {
@@ -291,25 +335,26 @@ func (m *mockVpsie) GetVpsieByIdentifier(ctx context.Context, vcIdentifier strin
 	return vpsie, nil
 }
 
-func (m *mockVpsie) GetVpsieStatusByIdentifier(context.Context, string) (*govpsie.Status, error) {
+func (m *mockVpsie) GetServerStatusByIdentifier(context.Context, string) (*govpsie.Status, error) {
 	return nil, nil
 }
-func (m *mockVpsie) GetVpsieConsole(ctx context.Context, identifierId string) (*govpsie.VpsieConsole, error) {
+func (m *mockVpsie) GetServerConsole(ctx context.Context, identifierId string) (*govpsie.ServerConsole, error) {
 	return nil, nil
 }
-func (m *mockVpsie) CreateVpsie(context.Context, *govpsie.CreateVpsieRequest) error {
+func (m *mockVpsie) CreateServer(context.Context, *govpsie.CreateServerRequest) error {
 	return nil
 }
-func (m *mockVpsie) DeleteVpsie(ctx context.Context, identifierId string) error {
+
+func (m *mockVpsie) DeleteServer(ctx context.Context, identifierId, password, reason, note string) error {
 	return nil
 }
 func (m *mockVpsie) StartVpsie(ctx context.Context, identifierId string) error {
 	return nil
 }
-func (m *mockVpsie) StopVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) StopServer(ctx context.Context, identifierId string) error {
 	return nil
 }
-func (m *mockVpsie) RestartVpsie(ctx context.Context, identifierId string) error {
+func (m *mockVpsie) RestartServer(ctx context.Context, identifierId string) error {
 	return nil
 }
 func (m *mockVpsie) ChangePassword(ctx context.Context, identifierId string, newPassword string) error {
@@ -327,7 +372,7 @@ func (m *mockVpsie) MoveVPC(ctx context.Context, request *govpsie.VpcRequest) er
 func (m *mockVpsie) AddTags(ctx context.Context, identifierId string, tags []string) error {
 	return nil
 }
-func (m *mockVpsie) ResizeVpsie(ctx context.Context, identifierId, cpu, ram string) error {
+func (m *mockVpsie) ResizeServer(ctx context.Context, identifierId, cpu, ram string) error {
 	return nil
 }
 func (m *mockVpsie) AddSsh(ctx context.Context, identifierId, sshKeyIdentifier string) error {
@@ -349,6 +394,45 @@ func (m *mockVpsie) AddFip(ctx context.Context, identifierId, dcIdentifier strin
 	return nil
 }
 
+func (m *mockVpsie) EditTag(ctx context.Context, tags []string, vmIdentifer string) error {
+	return nil
+}
+
+func (m *mockVpsie) GetServerByIdentifier(context.Context, string) (*govpsie.VmData, error) {
+	return nil, nil
+}
+func (m *mockVpsie) StartServer(ctx context.Context, identifierId string) error {
+	return nil
+}
+func (m *mockVpsie) Lock(ctx context.Context, identifierId string) error {
+	return nil
+}
+
+func (m *mockVpsie) UnLock(ctx context.Context, identifierId string) error {
+	return nil
+}
+func (m *mockVpsie) EnableIpv4(ctx context.Context, identifierId string) error {
+	return nil
+}
+func (m *mockVpsie) Resume(ctx context.Context, resumeReq *govpsie.ResumeReq) error {
+	return nil
+}
+func (m *mockVpsie) ResetNetwork(ctx context.Context, vmIdentifier string) error {
+	return nil
+}
+
+func (m *mockVpsie) ResetAllFirewalls(ctx context.Context) error {
+	return nil
+}
+func (m *mockVpsie) ListVirtualMachines(ctx context.Context) ([]govpsie.VirtualMachine, error) {
+	return nil, nil
+}
+func (m *mockVpsie) ListAllNodesOfUser(ctx context.Context) ([]govpsie.VmData, error) {
+	return nil, nil
+}
+func (m *mockVpsie) CheckAgentStatus(ctx context.Context, vmIdentifier string) (bool, error) {
+	return false, nil
+}
 func randString(n int) string {
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	b := make([]byte, n)

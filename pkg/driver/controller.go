@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/vpsie/govpsie"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 )
@@ -45,6 +48,88 @@ var (
 		Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 	}
 )
+
+type NotFoundError struct {
+	msg string
+}
+
+// Error implements the error interface for NotFoundError.
+func (e *NotFoundError) Error() string {
+	return e.msg
+}
+
+// IsNotFoundError checks if the given error is a NotFoundError.
+func IsNotFoundError(err error) bool {
+	_, ok := err.(*NotFoundError)
+	return ok
+}
+
+type VolumeMap struct {
+	Name          string
+	LastAccessed  time.Time
+	Failures      int
+	TotalFailures int
+}
+
+var VolumeFailures = make(map[string]*VolumeMap)
+var VolumeFailuresMu sync.Mutex
+var CleanupThreshold = time.Hour * 1
+
+// Function to increment the failure count for a volume name
+func incrementFailureCount(volumeName string) {
+	VolumeFailuresMu.Lock()
+	defer VolumeFailuresMu.Unlock()
+
+	volume, exists := VolumeFailures[volumeName]
+	if exists {
+		volume.LastAccessed = time.Now()
+		volume.Failures++
+		volume.TotalFailures++
+	} else {
+		VolumeFailures[volumeName] = &VolumeMap{
+			Name:          volumeName,
+			LastAccessed:  time.Now(),
+			Failures:      1,
+			TotalFailures: 1,
+		}
+	}
+}
+
+// Function to check if the maximum retry count is exceeded for a volume name
+func isRetryLimitExceeded(volumeName string, maxRetries int) bool {
+	VolumeFailuresMu.Lock()
+	defer VolumeFailuresMu.Unlock()
+
+	volume, exists := VolumeFailures[volumeName]
+	if !exists {
+		return false
+	}
+
+	return volume.Failures >= maxRetries
+}
+
+// Function to reset the failure count for a volume name
+func resetFailureCount(volumeName string) {
+	VolumeFailuresMu.Lock()
+	defer VolumeFailuresMu.Unlock()
+
+	volume, exists := VolumeFailures[volumeName]
+	if exists {
+		volume.Failures = 0
+	}
+}
+
+func getTotalFailures(volumeName string) int {
+	VolumeFailuresMu.Lock()
+	defer VolumeFailuresMu.Unlock()
+
+	volume, exists := VolumeFailures[volumeName]
+	if !exists {
+		return 0
+	}
+
+	return volume.TotalFailures
+}
 
 func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 
@@ -85,29 +170,24 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 	klog.Info("create volume called")
 
-	// get volume first, if it's created do no thing
-	volumes, err := d.storage.List(ctx, &govpsie.ListOptions{
-		Page:    0,
-		PerPage: 1000,
-	})
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	volume, err := d.getVolumeByName(ctx, volumeName)
+
+	if err == nil {
+		if int64(volume.Size)*giB != size {
+			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("invalid option requested size: %d", size))
+		}
+
+		klog.Info("volume already created")
+		return &csi.CreateVolumeResponse{
+			Volume: &csi.Volume{
+				VolumeId:      volume.Identifier,
+				CapacityBytes: int64(volume.Size) * giB,
+			},
+		}, nil
 	}
 
-	for _, volume := range volumes {
-		if volume.Name == volumeName {
-			if int64(volume.Size)*giB != size {
-				return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("invalid option requested size: %d", size))
-			}
-
-			klog.Info("volume already created")
-			return &csi.CreateVolumeResponse{
-				Volume: &csi.Volume{
-					VolumeId:      volume.Identifier,
-					CapacityBytes: int64(volume.Size) * giB,
-				},
-			}, nil
-		}
+	if err != nil && !IsNotFoundError(err) {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	createStorageRequest := &govpsie.StorageCreateRequest{
@@ -118,38 +198,73 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 		Description:  createdByVpsie,
 		StorageType:  storageType,
 		IsAutomatic:  0,
+		K8sTrials:    getTotalFailures(volumeName),
 	}
 	// if d.config.StorageTag != "" {
 	// 	createStorageRequest.Tags = append(createStorageRequest.Tags, d.config.StorageTag)
 	// }
 
 	klog.Infof("volume_req: %s\n , creating volume", createStorageRequest)
-	err = d.storage.CreateVolume(ctx, createStorageRequest)
-	if err != nil {
-		klog.Errorf("Error creating volume: %v", err)
 
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	var vol *govpsie.Storage
-	storages, err := d.storage.List(ctx, &govpsie.ListOptions{
-		Page:    0,
-		PerPage: 1000,
-	})
-
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	for _, storage := range storages {
-		if storage.Name == volumeName {
-			vol = &storage
-			break
+	contentSource := req.GetVolumeContentSource()
+	if contentSource != nil && contentSource.GetSnapshot() != nil {
+		snapshotID := contentSource.GetSnapshot().GetSnapshotId()
+		if snapshotID == "" {
+			return nil, status.Error(codes.InvalidArgument, "snapshot ID is empty")
 		}
+
+		_, err := d.getSnapshotByIdentifier(ctx, snapshotID)
+		if err != nil {
+			if err.Error() == "NotFound" {
+				return nil, status.Errorf(codes.NotFound, "snapshot %q not found", snapshotID)
+			}
+
+			return nil, err
+		}
+
+		err = d.storage.CloneSnapshot(ctx, snapshotID, "boxes")
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+	} else {
+		// Check if maximum retry count is exceeded
+		if isRetryLimitExceeded(volumeName, d.config.MaxRetries) {
+			klog.Errorf("Retry limit exceeded for volume: %s\n", volumeName)
+			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("retry limit exceeded for volume: %s", volumeName))
+		}
+
+		err = d.storage.CreateVolume(ctx, createStorageRequest)
+		if err != nil {
+			klog.Errorf("Error creating volume: %v", err)
+
+			incrementFailureCount(volumeName)
+
+			if err.Error() == "At the moment, Storage is not available in this Datacenter, please try a different option " {
+				return nil, status.Error(codes.ResourceExhausted, err.Error())
+			}
+
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		// Reset failure count on successful creation
+		resetFailureCount(volumeName)
+	}
+
+	vol, err := d.getVolumeByName(ctx, volumeName)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	if vol == nil {
 		return nil, status.Error(codes.NotFound, "volume not Created")
+	}
+
+	if vol.Size < int(size/giB) {
+		err := d.storage.UpdateSize(ctx, vol.Identifier, string(vol.Size))
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	resp := &csi.CreateVolumeResponse{
@@ -245,7 +360,7 @@ func (d *Driver) ControllerPublishVolume(ctx context.Context, req *csi.Controlle
 	}
 
 	// attach the volume to the correct node
-	err = d.storage.AttachToVPSie(ctx, req.VolumeId, req.NodeId, vm.Type)
+	err = d.storage.AttachToServer(ctx, req.VolumeId, req.NodeId, vm.Type)
 	if err != nil {
 		klog.Errorf("failed to attach volume: %v", err)
 		return nil, status.Error(codes.Internal, "ControllerPublishVolume failed to attach volume")
@@ -299,7 +414,7 @@ func (d *Driver) ControllerUnpublishVolume(ctx context.Context, req *csi.Control
 		}
 	}
 
-	if err := d.storage.DetachToVPSie(ctx, volumeID, nodeID, vm.Type); err != nil {
+	if err := d.storage.DetachToServer(ctx, volumeID, nodeID, vm.Type); err != nil {
 		return nil, err
 	}
 
@@ -415,7 +530,7 @@ func (d *Driver) ControllerGetCapabilities(ctx context.Context, req *csi.Control
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		// csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
 		// csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
 		csi.ControllerServiceCapability_RPC_EXPAND_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES_PUBLISHED_NODES,
@@ -430,19 +545,148 @@ func (d *Driver) ControllerGetCapabilities(ctx context.Context, req *csi.Control
 	return resp, nil
 }
 
-func (d *Driver) CreateSnapshot(context.Context, *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateSnapshot not implemented")
+func (d *Driver) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
+	name := req.GetName()
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "CreateSnapshot name must be provided")
+	}
 
+	source_volume_id := req.GetSourceVolumeId()
+	if source_volume_id == "" {
+		return nil, status.Error(codes.InvalidArgument, "CreateSnapshot source volume ID must be provided")
+	}
+
+	klog.Info("create snapshot called")
+
+	snapshots, err := d.storage.ListSnapshots(ctx, &govpsie.ListOptions{Page: 0, PerPage: 10000})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	volumeMap, err := d.volumeMap(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	for _, snapshot := range snapshots {
+		storage_identifier, ok := volumeMap[snapshot.StorageID]
+		if !ok {
+			return nil, status.Error(codes.Internal, "volume not found")
+		}
+		if snapshot.Name == name && storage_identifier == source_volume_id {
+			return &csi.CreateSnapshotResponse{
+				Snapshot: convertToCSISnapshot(&snapshot, source_volume_id),
+			}, nil
+		}
+	}
+
+	storageType := req.GetParameters()["type"]
+	err = d.storage.CreateSnapshot(ctx, source_volume_id, name, storageType)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	klog.Infof("snapshot %v is created", name)
+	snapshot, err := d.getSnapshotByName(ctx, name)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &csi.CreateSnapshotResponse{
+		Snapshot: convertToCSISnapshot(snapshot, source_volume_id),
+	}, nil
 }
 
-func (d *Driver) DeleteSnapshot(context.Context, *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteSnapshot not implemented")
+func (d *Driver) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
+	klog.Infof("delete snapshot called:  %s", req.SnapshotId)
+	snapshotID := req.GetSnapshotId()
+	if snapshotID == "" {
+		return nil, status.Error(codes.InvalidArgument, "DeleteSnapshot Snapshot ID must be provided")
+	}
 
+	err := d.storage.DeleteSnapshot(ctx, snapshotID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	klog.Infof("snapshot %v is deleted", req.SnapshotId)
+	return &csi.DeleteSnapshotResponse{}, nil
 }
 
-func (d *Driver) ListSnapshots(context.Context, *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListSnapshots not implemented")
+func (d *Driver) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
+	klog.Infof("list snapshot called for %v", req.GetSnapshotId())
 
+	snapListRsp := &csi.ListSnapshotsResponse{}
+
+	snapshotID := req.GetSnapshotId()
+	if snapshotID == "" {
+		var startingToken int32
+		if req.StartingToken != "" {
+			parsedToken, err := strconv.ParseInt(req.StartingToken, 10, 32)
+			if err != nil {
+				return nil, status.Errorf(codes.Aborted, "ListSnapshots starting token %q is not valid: %s", req.StartingToken, err)
+			}
+			startingToken = int32(parsedToken)
+		}
+
+		options := govpsie.ListOptions{
+			Page:    int(startingToken),
+			PerPage: int(req.MaxEntries),
+		}
+
+		snapshots, err := d.storage.ListSnapshots(ctx, &options)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		entries := make([]*csi.ListSnapshotsResponse_Entry, 0, len(snapshots))
+		volumeMaps, err := d.volumeMap(ctx)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		for _, snapshot := range snapshots {
+			storage_identifier, ok := volumeMaps[snapshot.StorageID]
+			if !ok {
+				return nil, status.Errorf(codes.Internal, "source volume %q not found", snapshot.StorageID)
+			}
+			entries = append(entries, &csi.ListSnapshotsResponse_Entry{
+				Snapshot: convertToCSISnapshot(&snapshot, storage_identifier),
+			})
+		}
+
+		snapListRsp = &csi.ListSnapshotsResponse{
+			Entries: entries,
+		}
+
+		if len(snapshots) == int(req.MaxEntries) {
+			snapListRsp.NextToken = strconv.Itoa(int(startingToken + 1))
+		}
+
+	} else {
+		snapshot, err := d.getSnapshotByIdentifier(ctx, snapshotID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		volumeMaps, err := d.volumeMap(ctx)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		storage_identifier, ok := volumeMaps[snapshot.StorageID]
+		if !ok {
+			return nil, status.Errorf(codes.Internal, "source volume %q not found", snapshot.StorageID)
+		}
+
+		snapListRsp = &csi.ListSnapshotsResponse{
+			Entries: []*csi.ListSnapshotsResponse_Entry{
+				{
+					Snapshot: convertToCSISnapshot(snapshot, storage_identifier),
+				},
+			},
+		}
+	}
+
+	return snapListRsp, nil
 }
 
 func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
@@ -460,10 +704,7 @@ func (d *Driver) ControllerExpandVolume(ctx context.Context, req *csi.Controller
 
 	klog.Info("controller expand volume called")
 
-	if err := d.storage.Update(ctx, &govpsie.StorageUpdateRequest{
-		StorageIdentifier: volID,
-		Size:              int(resizeGigaBytes),
-	}); err != nil {
+	if err := d.storage.UpdateSize(ctx, volID, string(resizeGigaBytes)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed updating storage")
 	}
 
@@ -624,4 +865,118 @@ func contains(slice []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func (d *Driver) getSnapshotByName(ctx context.Context, snapshotName string) (*govpsie.StorageSnapShot, error) {
+	page := 0
+	for {
+		snapshots, err := d.storage.ListSnapshots(ctx, &govpsie.ListOptions{Page: page, PerPage: 500})
+
+		if err != nil {
+			klog.Errorf("failed to list snapshots: %v", err)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		for _, snapshot := range snapshots {
+			if snapshot.Identifier == snapshotName {
+				return &snapshot, nil
+			}
+		}
+
+		if len(snapshots) < 500 {
+			break
+		}
+
+		page += 1
+	}
+
+	klog.Errorf("snapshot %s not found", snapshotName)
+	return nil, &NotFoundError{msg: fmt.Sprintf("snapshot %s not found", snapshotName)}
+}
+
+func (d *Driver) getSnapshotByIdentifier(ctx context.Context, snapshotIdentifier string) (*govpsie.StorageSnapShot, error) {
+	page := 0
+	for {
+		snapshots, err := d.storage.ListSnapshots(ctx, &govpsie.ListOptions{Page: page, PerPage: 500})
+
+		if err != nil {
+			klog.Errorf("failed to list snapshots: %v", err)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		for _, snapshot := range snapshots {
+			if snapshot.Identifier == snapshotIdentifier {
+				return &snapshot, nil
+			}
+		}
+
+		if len(snapshots) < 500 {
+			break
+		}
+
+		page += 1
+	}
+
+	klog.Errorf("snapshot %s not found", snapshotIdentifier)
+	return nil, &NotFoundError{msg: fmt.Sprintf("snapshot %s not found", snapshotIdentifier)}
+}
+
+func (d *Driver) getVolumeByName(ctx context.Context, volumeName string) (*govpsie.Storage, error) {
+	page := 0
+	for {
+		volumes, err := d.storage.List(ctx, &govpsie.ListOptions{Page: page, PerPage: 500})
+		if err != nil {
+			klog.Errorf("failed to list snapshots: %v", err)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		for _, volume := range volumes {
+			if volume.Name == volumeName {
+				return &volume, nil
+			}
+		}
+
+		if len(volumes) < 500 {
+			break
+		}
+
+		page += 1
+	}
+
+	return nil, &NotFoundError{msg: fmt.Sprintf("volume %s not found", volumeName)}
+}
+
+func convertToCSISnapshot(snapshot *govpsie.StorageSnapShot, sourceVolumeIdentifier string) *csi.Snapshot {
+	return &csi.Snapshot{
+		SnapshotId:     snapshot.Identifier,
+		SourceVolumeId: sourceVolumeIdentifier,
+		CreationTime:   timestamppb.New(snapshot.CreatedOn),
+		ReadyToUse:     true,
+		SizeBytes:      int64(snapshot.Size) * giB,
+	}
+}
+
+func (d *Driver) volumeMap(ctx context.Context) (map[int]string, error) {
+	volumeMap := make(map[int]string)
+
+	page := 0
+	for {
+		volumes, err := d.storage.List(ctx, &govpsie.ListOptions{Page: page, PerPage: 500})
+		if err != nil {
+			klog.Errorf("failed to list snapshots: %v", err)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		for _, volume := range volumes {
+			volumeMap[volume.ID] = volume.Identifier
+		}
+
+		if len(volumes) < 500 {
+			break
+		}
+
+		page += 1
+	}
+
+	return volumeMap, nil
 }

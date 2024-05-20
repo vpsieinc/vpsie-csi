@@ -11,7 +11,7 @@ spec:
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: vpsie-fast-block-storage 
+  name: vpsie-fast-block-storage
   annotations:
     storageclass.kubernetes.io/is-default-class: 'true'
 parameters:
@@ -32,6 +32,16 @@ parameters:
   type: sata
 provisioner: vpsie.csi.vpsie.com
 allowVolumeExpansion: true
+---
+
+kind: VolumeSnapshotClass
+apiVersion: snapshot.storage.k8s.io/v1
+metadata:
+  name: vpsie-fast-block-storage
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: vpsie.csi.vpsie.com
+deletionPolicy: Delete
 
 ---
 # write deployment for controller
@@ -74,6 +84,18 @@ spec:
               mountPath: /var/lib/csi/sockets/pluginproxy
         - name: csi-attacher
           image: registry.k8s.io/sig-storage/csi-attacher:v4.1.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+          env:
+            - name: ADDRESS
+              value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          imagePullPolicy: "Always"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/csi/sockets/pluginproxy/
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v6.2.1
           args:
             - "--v=5"
             - "--csi-address=$(ADDRESS)"
@@ -196,17 +218,22 @@ spec:
           image: natnaeldocker/csi-vpsie:snap
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
-            - "--token=$(TOKEN)"
             - "--url=$(URL)"
+            - "--token=$(TOKEN)"
             - "--max-retries=$(MAX_RETRIES)"
           env:
-            - name: CSI_ENDPOINT
-              value: unix:///csi/csi.sock
             - name: TOKEN
               valueFrom:
                 secretKeyRef:
                   name: vpsie-secret
                   key: token
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: URL
+              valueFrom:
+                secretKeyRef:
+                  name: vpsie-secret
+                  key: url
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
@@ -215,11 +242,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-             - name: URL
-              valueFrom:
-                secretKeyRef:
-                  name: vpsie-secret
-                  key: url
             - name: MAX_RETRIES
               valueFrom:
                 secretKeyRef:
@@ -322,6 +344,12 @@ rules:
   - apiGroups: [ "" ]
     resources: [ "nodes" ]
     verbs: [ "get", "list", "watch" ]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["get", "list"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list"]
 
 ---
 kind: ClusterRoleBinding
@@ -337,6 +365,45 @@ roleRef:
   name: csi-vpsie-provisioner-role
   apiGroup: rbac.authorization.k8s.io
 
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: csi-vpsie-snapshotter-role
+  labels: 
+    app.kubernetes.io/name: vpsie-csi-driver
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshots.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshots.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata: 
+  name: csi-vpsie-snapshotter-binding
+subjects:
+  - kind: ServiceAccount
+    name: vpsie-csi-node-sa
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: csi-vpsie-snapshotter-role
+  apiGroup: rbac.authorization.k8s.io
 ---
 
 kind: ClusterRole

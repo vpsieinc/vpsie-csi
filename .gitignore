@@ -5,6 +5,7 @@
 *.so
 *.dylib
 
+cmd/vpsie-csi-plugin/vpsie-csi-plugin
 # Test binary, built with `go test -c`
 *.test
 
