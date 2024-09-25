@@ -8,4 +8,4 @@ spec:
   resources:
     requests:
       storage: 2Gi
-  storageClassName: vpsie-slow-block-storage
+  storageClassName: vpsie-fast-block-storage

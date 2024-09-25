@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -236,6 +237,10 @@ func (d *Driver) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest)
 
 		err = d.storage.CreateVolume(ctx, createStorageRequest)
 		if err != nil {
+			s, _ := json.MarshalIndent(createStorageRequest, "", "\t")
+			klog.Error("json request to vpsie: %s", string(s))
+			klog.Error("Error from vpsie: %v", err)
+
 			klog.Errorf("Error creating volume: %v", err)
 
 			incrementFailureCount(volumeName)
